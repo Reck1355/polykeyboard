@@ -189,7 +189,15 @@ class SlideInputMethodService :
     private enum class Layer { ALPHA, SYMBOLS, SYMBOLS_ALT }
 
     private var layer = Layer.ALPHA
-    private var editorBaseLayout: KeyboardLayout = Layouts.QwertyEn
+
+    /**
+     * The letters board, which the editor mode swaps in.
+     *
+     * The honeycomb: the hex slice changed the letters layer to the approved four-row board. Every
+     * other mode keeps its own layout — email and URL keep their rectangular delimiters, the pads
+     * and the symbols pages are untouched — because only this one is staggered for hex caps.
+     */
+    private var editorBaseLayout: KeyboardLayout = Layouts.HexQwertyEn
     private var searchPreviousLayer = Layer.ALPHA
     private var searchPreviousShift = ShiftState.OFF
     private var preservedCapsLock = false
@@ -1164,6 +1172,9 @@ class SlideInputMethodService :
                 false
             }
             KeyType.SETTINGS -> false
+            // The globe renders and is announced, but picks nothing until a second language
+            // ships; pressing it must not fall through to a character commit.
+            KeyType.LANGUAGE -> false
             KeyType.CHARACTER -> if (editorInputPolicy.usesRawKeyEvents) {
                 handleRawText(connection, appliedText)
             } else {
@@ -2439,7 +2450,7 @@ class SlideInputMethodService :
                 return
             }
             KeyType.SHIFT, KeyType.SYMBOLS, KeyType.SYMBOLS_ALT, KeyType.ALPHA, KeyType.EMOJI,
-            KeyType.MIC, KeyType.SETTINGS -> return
+            KeyType.LANGUAGE, KeyType.MIC, KeyType.SETTINGS -> return
         }
         view.searchQuery = query.take(MAX_SEARCH_QUERY_LENGTH)
         refreshEmojiSearch()
@@ -3416,7 +3427,7 @@ class SlideInputMethodService :
     }
 
     private fun layoutFor(mode: EditorKeyboardMode): KeyboardLayout = when (mode) {
-        EditorKeyboardMode.TEXT -> Layouts.QwertyEn
+        EditorKeyboardMode.TEXT -> Layouts.HexQwertyEn
         EditorKeyboardMode.EMAIL -> Layouts.EmailEn
         EditorKeyboardMode.URI -> Layouts.UriEn
         EditorKeyboardMode.NUMBER, EditorKeyboardMode.PIN -> Layouts.NumberPad

@@ -130,6 +130,66 @@ object Layouts {
         ),
     )
 
+    /** The language switch — the globe. Inert until a second language ships. */
+    private val globe = Key("\uD83C\uDF10", KeyType.LANGUAGE, gestureEligible = false)
+
+    /**
+     * The hexagonal letters board — the approved form.
+     *
+     * Four rows of 10 / 9 / 9 / 7 keys, every one a regular pointy-top hexagon except the space
+     * bar, which is one key over three cells. Row starts step by half a cell (leading gaps of
+     * 0 / 0.5 / 0 / 0.5), so every adjacent row sits exactly half a key from the one above it —
+     * the stagger a pointy-top honeycomb interlocks on, and the one the first hex attempt got
+     * wrong by aligning the a-row and the z-row on top of each other.
+     *
+     * The letter keys are QWERTY's own objects, so positions, alternates and the decoder keep one
+     * source; only their digit hints go, because the approved board draws a bare hexagon. The
+     * shift, delete, `?123` and enter keys are the wide QWERTY ones narrowed to a single cell,
+     * since on this board every key but space is one cell wide.
+     */
+    val HexQwertyEn = QwertyEn.copy(
+        id = ID_HEX_QWERTY,
+        supportsNumberRow = false,
+        hexKeys = true,
+        rows = listOf(
+            KeyRow(QwertyEn.rows[0].keys.map { it.copy(hint = null) }),
+            KeyRow(
+                QwertyEn.rows[1].keys.map { it.copy(hint = null) },
+                HEX_ROW_OFFSET,
+                HEX_ROW_OFFSET,
+            ),
+            KeyRow(
+                listOf(shift.copy(widthWeight = 1f)) +
+                    QwertyEn.rows[2].keys.drop(1).dropLast(1) +
+                    listOf(delete.copy(widthWeight = 1f)),
+            ),
+            KeyRow(
+                listOf(
+                    globe,
+                    toSymbols.copy(widthWeight = 1f),
+                    comma,
+                    space.copy(widthWeight = 3f),
+                    period,
+                    emoji,
+                    enter.copy(widthWeight = 1f),
+                ),
+                HEX_ROW_OFFSET,
+                HEX_ROW_OFFSET,
+            ),
+        ),
+    )
+
+    /**
+     * The honeycomb's half-key stagger, in width units — 0.5 cells, one half of a key.
+     *
+     * Named here rather than written as a `0.5f` in each row so the invariant the drawing depends
+     * on reads as an intention instead of a magic number.
+     */
+    private const val HEX_ROW_OFFSET = 0.5f
+
+    /** Layout id of [HexQwertyEn], for the places that must name it without holding it. */
+    const val ID_HEX_QWERTY = "hex_qwerty_en"
+
     private fun digit(value: String, alternates: List<String> = emptyList()) =
         Key(value, KeyType.CHARACTER, alternates = alternates, gestureEligible = false)
 

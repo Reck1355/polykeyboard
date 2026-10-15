@@ -14,6 +14,7 @@ import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
 import android.util.AttributeSet
+import android.util.Log
 import android.util.TypedValue
 import android.view.MotionEvent
 import android.view.View
@@ -28,6 +29,7 @@ import com.slide.core.layout.KeyType
 import com.slide.core.layout.KeyboardLayout
 import com.slide.core.layout.Layouts
 import com.slide.core.settings.KeyboardSettings
+import com.slide.core.theme.HexPalette
 import com.slide.core.theme.KeyboardTheme
 import com.slide.core.theme.Themes
 import com.slide.engine.gesture.GestureKeyMap
@@ -122,6 +124,34 @@ class KeyboardView @JvmOverloads constructor(
             invalidate()
         }
 
+    /**
+     * The six colours the hex board draws with — one source, so a later slice can repaint the
+     * whole board from user settings without touching a line of the drawing.
+     */
+    var hexPalette: HexPalette = HexPalette.Jade
+        set(value) {
+            field = value
+            invalidate()
+        }
+
+    /**
+     * True while the drawn layout is the honeycomb.
+     *
+     * Read from the layout, not a global switch: only a staggered layout gains anything from hex
+     * caps, and keying the drawing off the layout is what keeps every other layer rectangular.
+     */
+    private val hexBoard: Boolean get() = keyboardLayout.hexKeys
+
+    /**
+     * How much the board was scaled to fit its frame, 1.0 when it fit as drawn.
+     *
+     * Reported rather than buried, because a scaled board is a board that lost the approved size,
+     * and that is the kind of thing a picture is supposed to settle in one glance instead of a
+     * hunt.
+     */
+    var hexScale: Float = 1f
+        private set
+
     var shiftState: ShiftState = ShiftState.OFF
         set(value) {
             if (field == value) return
@@ -214,6 +244,11 @@ class KeyboardView @JvmOverloads constructor(
     }
 
     private val reusableRect = RectF()
+
+    /** Hex fills and the thin seam stroke between caps, drawn only on the honeycomb. */
+    private val hexStrokePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE }
+    private val hexPath = Path()
+    private val hexEdgeWidth = dp(1.5f)
 
     /** Reused across draws; `Paint.fontMetrics` allocates a fresh object per read. */
     private val reusableFontMetrics = Paint.FontMetrics()
@@ -310,7 +345,8 @@ class KeyboardView @JvmOverloads constructor(
                 val result = searchResultAt(x, y)
                 return if (result >= 0) A11Y_SEARCH_RESULT_BASE + result else INVALID_ID
             }
-            val index = placedKeys.indexOfFirst { it.contains(x, y) }
+            val resolved = keyAt(x, y) ?: return INVALID_ID
+            val index = placedKeys.indexOf(resolved)
             return if (index >= 0) A11Y_KEY_BASE + index else INVALID_ID
         }
 
@@ -437,11 +473,26 @@ class KeyboardView @JvmOverloads constructor(
 
     override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
         val width = MeasureSpec.getSize(widthMeasureSpec)
-        val effective = Layouts.withNumberRow(keyboardLayout, settings.showNumberRow)
-        val rowUnits = effective.rows.sumOf { it.heightWeight.toDouble() }.toFloat()
-        val contentHeight = rowUnits * baseRowHeight * settings.keyHeightScale
         val header = if (searchMode) searchHeaderHeight() else 0f
-        val height = topPadding + header + contentHeight + bottomInset()
+        val height = if (hexBoard) {
+            // The board's natural height is a constant 3.7528 cell widths: the number row is off,
+            // the key-height setting does not apply to a shape whose proportion is fixed. But the
+            // frame may be shorter than that - a landscape window, a keyboard sitting under a
+            // taller app - and then it is the frame that decides, so the natural request is capped
+            // by whatever the parent allows. The board then scales uniformly into what is left,
+            // which is the landscape case: height binds, and the leftover side width stays empty.
+            val natural = topPadding + header + HexBoard.boardHeight(width.toFloat()) + bottomInset()
+            if (MeasureSpec.getMode(heightMeasureSpec) == MeasureSpec.UNSPECIFIED) {
+                natural
+            } else {
+                min(natural, MeasureSpec.getSize(heightMeasureSpec).toFloat())
+            }
+        } else {
+            val effective = Layouts.withNumberRow(keyboardLayout, settings.showNumberRow)
+            val rowUnits = effective.rows.sumOf { it.heightWeight.toDouble() }.toFloat()
+            val contentHeight = rowUnits * baseRowHeight * settings.keyHeightScale
+            topPadding + header + contentHeight + bottomInset()
+        }
         setMeasuredDimension(width, height.roundToInt())
     }
 
@@ -452,18 +503,50 @@ class KeyboardView @JvmOverloads constructor(
     }
 
     private fun recomputeGeometry(width: Int, height: Int) {
-        val effective = Layouts.withNumberRow(keyboardLayout, settings.showNumberRow)
         val header = if (searchMode) searchHeaderHeight() else 0f
-        val contentHeight = (height - topPadding - bottomInset() - header).coerceAtLeast(1f)
-        placedKeys = KeyGeometry.place(
-            layout = effective,
-            width = width.toFloat(),
-            contentHeight = contentHeight,
-            topOffset = topPadding + header,
-        )
+        val topOffset = topPadding + header
+        val available = (height - topOffset - bottomInset()).coerceAtLeast(1f)
+        val effective = Layouts.withNumberRow(keyboardLayout, settings.showNumberRow)
+        placedKeys = if (effective.hexKeys) {
+            placeHexBoard(effective, width.toFloat(), available, topOffset)
+        } else {
+            hexScale = 1f
+            KeyGeometry.place(
+                layout = effective,
+                width = width.toFloat(),
+                contentHeight = available,
+                topOffset = topOffset,
+            )
+        }
         a11yPromisedAlternates.clear()
         updateSystemGestureExclusion(width)
         accessibilityHelper.invalidateRoot()
+    }
+
+    /**
+     * Places the honeycomb, scaling the whole board uniformly when the frame cannot hold it.
+     *
+     * Sizing lives in [HexBoard.place] so it can be asserted without a device: the cell is the
+     * largest that fits the width and the height, the board is centred horizontally, and the scale
+     * is applied to both axes at once so the cap stays a regular hexagon. Only the factor is
+     * reported here; the shape is [HexKeyMetrics]' and is never recomputed in the view.
+     */
+    private fun placeHexBoard(
+        layout: KeyboardLayout,
+        viewWidth: Float,
+        availableHeight: Float,
+        topOffset: Float,
+    ): List<PlacedKey> {
+        val placement = HexBoard.place(layout, viewWidth, availableHeight, topOffset)
+        hexScale = placement.scale
+        if (hexScale < 1f) {
+            Log.i(
+                TAG,
+                "Hex board scaled to $hexScale: ${placement.cellWidth}px cells, " +
+                    "${placement.boardHeight}px block in ${availableHeight}px of frame",
+            )
+        }
+        return placement.keys
     }
 
     /**
@@ -539,7 +622,7 @@ class KeyboardView @JvmOverloads constructor(
     // region Drawing
 
     override fun onDraw(canvas: Canvas) {
-        canvas.drawColor(keyboardTheme.background)
+        canvas.drawColor(if (hexBoard) hexPalette.background else keyboardTheme.background)
 
         if (searchMode) drawSearchHeader(canvas)
 
@@ -591,6 +674,47 @@ class KeyboardView @JvmOverloads constructor(
     /** @param pressOverlay 1 while held, decaying to 0 across the release fade. */
     private fun drawKey(canvas: Canvas, placed: PlacedKey, pressOverlay: Float) {
         val key = placed.key
+        if (hexBoard) {
+            drawHexSurface(canvas, placed, pressOverlay)
+        } else {
+            drawRectSurface(canvas, placed, pressOverlay)
+        }
+
+        if (key.type == KeyType.SPACE) {
+            drawSpaceLabel(canvas, placed)
+            return
+        }
+
+        if (isActionIcon(key.type)) {
+            drawActionIcon(canvas, key.type, placed)
+            return
+        }
+
+        labelPaint.color = textColorFor(key)
+        labelPaint.typeface = keyLabelTypeface
+        val maxText = min(placed.width * if (key.type == KeyType.CHARACTER) 0.65f else 0.8f, placed.height * 0.58f)
+        labelPaint.textSize = min(if (key.type == KeyType.CHARACTER) sp(22f) else sp(15f), maxText)
+        labelPaint.getFontMetrics(reusableFontMetrics)
+        val baseline = placed.centerY -
+            (reusableFontMetrics.ascent + reusableFontMetrics.descent) / 2f
+        canvas.drawText(displayLabel(key), placed.centerX, baseline, labelPaint)
+
+        val hint = KeyHintStyle.visibleHint(key, settings.showNumberRow)
+        if (hint != null) {
+            hintPaint.color = keyboardTheme.hintText
+            hintPaint.textSize = min(sp(10f), placed.width * 0.24f)
+            canvas.drawText(hint, placed.right - keyGapH - dp(8f), placed.top + keyGapV + dp(13f), hintPaint)
+        }
+    }
+
+    /**
+     * The rectangular keycap: a rounded surface inset into the touch cell.
+     *
+     * Extracted verbatim from [drawKey] so the honeycomb branch could share the label, hint and
+     * action-icon code below it; every non-hex layer still draws exactly what it drew before.
+     */
+    private fun drawRectSurface(canvas: Canvas, placed: PlacedKey, pressOverlay: Float) {
+        val key = placed.key
         val compactSurface =
             !settings.showKeyBorders && KeySurfaceStyle.usesCompactSurface(key.type)
         val surfaceInsetV = if (compactSurface) dp(8f) else keyGapV
@@ -626,32 +750,96 @@ class KeyboardView @JvmOverloads constructor(
             borderPaint.color = keyboardTheme.keyBorder
             canvas.drawRoundRect(reusableRect, cornerRadius, cornerRadius, borderPaint)
         }
+    }
 
-        if (key.type == KeyType.SPACE) {
-            drawSpaceLabel(canvas, placed)
-            return
+    /**
+     * The hex keycap, drawn only from [hexPalette].
+     *
+     * The cap comes from [KeyGeometry.hexShapeFor] — the same shape the tap resolves against — so
+     * there is one answer to "where is this key" and the finger always lands on the hexagon it
+     * sees. A thin stroke in the background colour is what separates neighbouring caps in a row,
+     * which share an edge exactly; without it they read as the merged slab this shape exists to
+     * avoid.
+     *
+     * A key wider than one cell (the space bar) is drawn as the cells it spans with the internal
+     * seams painted out, because the approved board reads as three hexes joined in the middle.
+     * Its touch target stays the single wide cap [KeyGeometry.hexShapeFor] gives it, which covers
+     * all three cells — a thumb anywhere on the bar types a space.
+     */
+    private fun drawHexSurface(canvas: Canvas, placed: PlacedKey, pressOverlay: Float) {
+        val cells = HexBoard.spanCells(placed.key.widthWeight)
+        val fill = hexBackgroundFor(placed.key)
+        val cellWidth = placed.width / cells
+        val halfWidth = cellWidth * 0.5f * HexKeyMetrics.WIDTH_FRACTION
+        val halfHeight = placed.height * 0.5f * HexKeyMetrics.HEIGHT_FRACTION
+        val shoulderHalfHeight = halfHeight * HexKeyMetrics.SHOULDER_HEIGHT_FRACTION
+
+        fillPaint.color = fill
+        hexStrokePaint.color = hexPalette.background
+        hexStrokePaint.strokeWidth = hexEdgeWidth
+        for (cell in 0 until cells) {
+            val path = hexPathFor(capAt(placed, cell, cellWidth, halfWidth, halfHeight, shoulderHalfHeight))
+            canvas.drawPath(path, fillPaint)
+            canvas.drawPath(path, hexStrokePaint)
         }
 
-        if (isActionIcon(key.type)) {
-            drawActionIcon(canvas, key.type, placed)
-            return
+        // Paint out the seams the per-cell outline just drew between the joined cells, leaving the
+        // scalloped outer silhouette. The stroke is doubled so it covers the two half-strokes it
+        // sits between rather than leaving a hairline of background down the middle of the key.
+        if (cells > 1) {
+            hexStrokePaint.color = fill
+            hexStrokePaint.strokeWidth = hexEdgeWidth * 2f + 1f
+            val shoulderTop = placed.centerY - shoulderHalfHeight
+            val shoulderBottom = placed.centerY + shoulderHalfHeight
+            for (cell in 1 until cells) {
+                val seamX = placed.left + cell * cellWidth
+                canvas.drawLine(seamX, shoulderTop, seamX, shoulderBottom, hexStrokePaint)
+            }
         }
 
-        labelPaint.color = textColorFor(key)
-        labelPaint.typeface = keyLabelTypeface
-        val maxText = min(placed.width * if (key.type == KeyType.CHARACTER) 0.65f else 0.8f, placed.height * 0.58f)
-        labelPaint.textSize = min(if (key.type == KeyType.CHARACTER) sp(22f) else sp(15f), maxText)
-        labelPaint.getFontMetrics(reusableFontMetrics)
-        val baseline = placed.centerY -
-            (reusableFontMetrics.ascent + reusableFontMetrics.descent) / 2f
-        canvas.drawText(displayLabel(key), placed.centerX, baseline, labelPaint)
-
-        val hint = KeyHintStyle.visibleHint(key, settings.showNumberRow)
-        if (hint != null) {
-            hintPaint.color = keyboardTheme.hintText
-            hintPaint.textSize = min(sp(10f), placed.width * 0.24f)
-            canvas.drawText(hint, placed.right - keyGapH - dp(8f), placed.top + keyGapV + dp(13f), hintPaint)
+        if (pressOverlay > 0f) {
+            fillPaint.color = hexPalette.pressed
+            fillPaint.alpha = (Color.alpha(hexPalette.pressed) * pressOverlay).roundToInt()
+            for (cell in 0 until cells) {
+                val path = hexPathFor(capAt(placed, cell, cellWidth, halfWidth, halfHeight, shoulderHalfHeight))
+                canvas.drawPath(path, fillPaint)
+            }
         }
+    }
+
+    /** The cap of one cell of a key that may span several. */
+    private fun capAt(
+        placed: PlacedKey,
+        cell: Int,
+        cellWidth: Float,
+        halfWidth: Float,
+        halfHeight: Float,
+        shoulderHalfHeight: Float,
+    ): HexShape = HexShape(
+        centerX = placed.left + (cell + 0.5f) * cellWidth,
+        centerY = placed.centerY,
+        halfWidth = halfWidth,
+        halfHeight = halfHeight,
+        shoulderHalfHeight = shoulderHalfHeight,
+    )
+
+    /** Rewrites [hexPath] as the outline of [cap] and hands it back for drawing. */
+    private fun hexPathFor(cap: HexShape): Path {
+        val vertices = cap.vertices()
+        hexPath.reset()
+        hexPath.moveTo(vertices[0].x, vertices[0].y)
+        for (index in 1 until vertices.size) {
+            hexPath.lineTo(vertices[index].x, vertices[index].y)
+        }
+        hexPath.close()
+        return hexPath
+    }
+
+    /** The hex board's fills, from the six-slot palette rather than the keyboard theme. */
+    private fun hexBackgroundFor(key: Key): Int = when (key.type) {
+        KeyType.ENTER -> hexPalette.enterKey
+        KeyType.CHARACTER, KeyType.SPACE -> hexPalette.key
+        else -> hexPalette.specialKey
     }
 
     /** One compact optical box and stroke weight keeps every action glyph in the same family. */
@@ -779,7 +967,7 @@ class KeyboardView @JvmOverloads constructor(
     }
 
     private fun drawSpaceLabel(canvas: Canvas, placed: PlacedKey) {
-        labelPaint.color = keyboardTheme.hintText
+        labelPaint.color = if (hexBoard) hexPalette.label else keyboardTheme.hintText
         labelPaint.typeface = keyLabelTypeface
         labelPaint.textSize = min(sp(12f), placed.width * 0.28f)
         labelPaint.getFontMetrics(reusableFontMetrics)
@@ -843,15 +1031,20 @@ class KeyboardView @JvmOverloads constructor(
         else -> keyboardTheme.specialKeyBackground
     }
 
-    private fun textColorFor(key: Key): Int = when (key.type) {
-        KeyType.ENTER -> keyboardTheme.accentText
-        KeyType.SHIFT -> if (settings.showKeyBorders && shiftState != ShiftState.OFF) {
-            keyboardTheme.accentText
-        } else {
-            keyboardTheme.specialKeyText
+    private fun textColorFor(key: Key): Int {
+        // The honeycomb resolves every glyph from its own six-slot palette, so a later slice can
+        // repaint the board without the theme moving with it.
+        if (hexBoard) return hexPalette.label
+        return when (key.type) {
+            KeyType.ENTER -> keyboardTheme.accentText
+            KeyType.SHIFT -> if (settings.showKeyBorders && shiftState != ShiftState.OFF) {
+                keyboardTheme.accentText
+            } else {
+                keyboardTheme.specialKeyText
+            }
+            KeyType.CHARACTER, KeyType.SPACE -> keyboardTheme.keyText
+            else -> keyboardTheme.specialKeyText
         }
-        KeyType.CHARACTER, KeyType.SPACE -> keyboardTheme.keyText
-        else -> keyboardTheme.specialKeyText
     }
 
     private fun displayLabel(key: Key): String = when (key.type) {
@@ -1090,12 +1283,22 @@ class KeyboardView @JvmOverloads constructor(
         invalidate()
     }
 
+    /**
+     * The key under (x, y): the hex cap on the honeycomb, the touch cell anywhere else.
+     *
+     * One entry point so the two shapes cannot end up answering different keys — the geometry's
+     * whole promise is that the cap a finger sees and the cap a touch resolves against are the
+     * same shape, and routing every caller through here is what keeps that true in the view.
+     */
+    private fun keyAt(x: Float, y: Float): PlacedKey? =
+        if (hexBoard) KeyGeometry.hitTestHex(placedKeys, x, y) else KeyGeometry.hitTest(placedKeys, x, y)
+
     private fun handlePointerDown(pointerId: Int, x: Float, y: Float, eventTime: Long) {
         // A contact that arrives while a swipe is in flight — the other thumb, a palm — is not a
         // key press: sounding it, previewing it, or committing it on lift all interrupt the swipe.
         // Left out of [pointers] entirely, so its own move and lift are ignored too.
         if (PointerOwnership.ignoresKeyDown(gesturePointerId)) return
-        val placed = KeyGeometry.hitTest(placedKeys, x, y) ?: return
+        val placed = keyAt(x, y) ?: return
         completedGesturePoints.clear()
         val pointer = Pointer(placed, placed, x, y, eventTime)
         pointers[pointerId] = pointer
@@ -1186,7 +1389,7 @@ class KeyboardView @JvmOverloads constructor(
 
         // Slide-off: the finger moved to a different key before lifting.
         if (travelled > touchSlop) {
-            val nowOver = KeyGeometry.hitTest(placedKeys, x, y)
+            val nowOver = keyAt(x, y)
             if (nowOver == null && !pointer.cancelled) {
                 cancelPendingLongPress(pointerId)
                 cancelRepeat(pointerId)
@@ -1228,7 +1431,7 @@ class KeyboardView @JvmOverloads constructor(
             !pointer.deleteWordGesture &&
             !pointer.longPressFired
         ) {
-            val releaseOver = KeyGeometry.hitTest(placedKeys, x, y)
+            val releaseOver = keyAt(x, y)
             val release = KeyPressRouting.resolveRelease(
                 hasValidKey = releaseOver != null,
                 isCurrentKey = releaseOver === pointer.placed,
@@ -1557,11 +1760,14 @@ class KeyboardView @JvmOverloads constructor(
         KeyType.SYMBOLS_ALT -> "More symbols"
         KeyType.ALPHA -> "Letters"
         KeyType.EMOJI -> "Emoji"
+        KeyType.LANGUAGE -> "Language"
         KeyType.MIC -> "Voice typing"
         KeyType.SETTINGS -> "Settings"
     }
 
     private companion object {
+        const val TAG = "SlideKeyboardView"
+
         const val TRAIL_POINTS = 192
 
         /**

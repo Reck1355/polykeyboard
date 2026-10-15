@@ -15,6 +15,15 @@ data class KeyboardLayout(
     val rows: List<KeyRow>,
     /** Whether the user's optional persistent digit row makes sense on this layout. */
     val supportsNumberRow: Boolean = false,
+    /**
+     * Whether the view draws this layout as a honeycomb of hexagon keycaps.
+     *
+     * A layout property rather than a global switch, because only a board whose rows are staggered
+     * by half a key draws caps that interlock: the same hexagons over a layout with rows aligned
+     * on the cell grid stack into a slab instead. The flag is also what lets every other layer —
+     * symbols, the pads, the emoji search grid — keep its rectangular keys untouched.
+     */
+    val hexKeys: Boolean = false,
 ) {
     /** Total width weight of the widest row; used to normalise key widths. */
     val widthUnits: Float = rows.maxOfOrNull { it.totalWeight }?.takeIf { it > 0f } ?: 10f
@@ -69,9 +78,17 @@ enum class KeyType {
      * and a key that asks for the layer already on screen is a key that does nothing.
      */
     SYMBOLS_ALT,
-    /** Switch back to the letters layer. */
+    /** Switch to the letters layer. */
     ALPHA,
     EMOJI,
+    /**
+     * The language switch — the globe.
+     *
+     * Distinct from [SYMBOLS] and [SETTINGS] because it will one day pick a language, and a key
+     * that has to be told apart from every other special key by its label alone is a key the
+     * service cannot dispatch. Inert until a second language ships.
+     */
+    LANGUAGE,
     MIC,
     SETTINGS,
 }
