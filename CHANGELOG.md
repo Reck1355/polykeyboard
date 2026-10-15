@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+### Added
+
+- Hex keycap geometry for the keyboard view: one cap object serves both the drawn shape and the
+  touch target, anchored on the key positions the layout already resolves, with the honeycomb
+  proportions that let rows staggered by half a key interlock edge to edge. Hit resolution over
+  the caps is bounded so the row indents stay forgiving and the padding above and below the keys
+  stays inert. The view does not draw the caps yet.
+
 ### Fixed
 
 - Double-space punctuation preserves password and literal-field input, leaves selected text
