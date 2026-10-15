@@ -484,22 +484,42 @@ class KeyboardView @JvmOverloads constructor(
      */
     private fun displayHeight(): Float = resources.displayMetrics.heightPixels.toFloat()
 
+    /**
+     * The board's sizing for the display's current orientation.
+     *
+     * The hexagon ratio is per orientation because the two axes are spent in opposite ways — see
+     * [HexKeyMetrics.PORTRAIT_HEIGHT_FRACTION] and [HexBoard.REGULAR_HEIGHT_RATIO]. Portrait is the
+     * default: only a landscape display gets the regular hexagon and the side bands, and a
+     * configuration the runtime has not settled yet behaves like portrait rather than picking a
+     * ratio at random.
+     */
+    private fun hexOrientation(): HexBoard.Orientation =
+        if (resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE) {
+            HexBoard.Orientation.LANDSCAPE
+        } else {
+            HexBoard.Orientation.PORTRAIT
+        }
+
     override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
         val width = MeasureSpec.getSize(widthMeasureSpec)
         val header = if (searchMode) searchHeaderHeight() else 0f
         val height = if (hexBoard) {
-            // The board's natural height is a constant 3.7528 cell widths: the number row is off,
-            // the key-height setting does not apply to a shape whose proportion is fixed. Two
-            // things bound it. The approved board may take no more of the display than
+            // The board's natural height is `3.25 x ratio` cell widths: the number row is off, the
+            // key-height setting does not apply to a shape whose proportion is fixed. Two things
+            // bound it. The approved board may take no more of the display than
             // HexBoard.LANDSCAPE_HEIGHT_FRACTION of its height; without that cap a wide landscape
             // screen lets the width alone decide a 240 px cell and a 900 px block that fills the
-            // width with no side margins, which is not the board that was approved. The cap turns
-            // that into the approved single scaled board - 594 px of the 1080 px screen, 158.28 px
-            // cells, the leftover width empty. And the frame may still be shorter than the capped
-            // board - a keyboard sitting under a taller app - and then it is the frame that decides.
-            // In either case the board scales uniformly into what is left.
+            // width with no side bands, which is not the board that was approved. The cap turns
+            // that into the approved single scaled board - 486 px of the 1080 px screen, 129.5 px
+            // cells, the leftover width empty, and 55% of the height left for the app above. And the
+            // frame may still be shorter than the capped board - a keyboard sitting under a taller
+            // app - and then it is the frame that decides. In either case the board scales uniformly
+            // into what is left, at the hexagon ratio the orientation calls for: tall in portrait,
+            // regular in landscape.
+            val orientation = hexOrientation()
             val natural = topPadding + header +
-                HexBoard.cappedBoardHeight(width.toFloat(), displayHeight()) + bottomInset()
+                HexBoard.cappedBoardHeight(width.toFloat(), displayHeight(), HexBoard.sizing(orientation)) +
+                bottomInset()
             if (MeasureSpec.getMode(heightMeasureSpec) == MeasureSpec.UNSPECIFIED) {
                 natural
             } else {
@@ -562,9 +582,10 @@ class KeyboardView @JvmOverloads constructor(
      * Places the honeycomb, scaling the whole board uniformly when the frame cannot hold it.
      *
      * Sizing lives in [HexBoard.place] so it can be asserted without a device: the cell is the
-     * largest that fits the width and the height, the board is centred horizontally, and the scale
-     * is applied to both axes at once so the cap stays a regular hexagon. Only the factor is
-     * reported here; the shape is [HexKeyMetrics]' and is never recomputed in the view.
+     * largest that fits the width and the height at the orientation's hexagon ratio, the board is
+     * centred horizontally, and the scale is applied to both axes at once so the cap keeps its
+     * hexagon. Only the factor is reported here; the shape is [HexKeyMetrics]' and is never
+     * recomputed in the view.
      */
     private fun placeHexBoard(
         layout: KeyboardLayout,
@@ -572,7 +593,13 @@ class KeyboardView @JvmOverloads constructor(
         availableHeight: Float,
         topOffset: Float,
     ): List<PlacedKey> {
-        val placement = HexBoard.place(layout, viewWidth, availableHeight, topOffset)
+        val placement = HexBoard.place(
+            layout,
+            viewWidth,
+            availableHeight,
+            HexBoard.sizing(hexOrientation()),
+            topOffset,
+        )
         hexScale = placement.scale
         if (hexScale < 1f) {
             Log.i(

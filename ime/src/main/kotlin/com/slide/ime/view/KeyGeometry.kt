@@ -287,15 +287,35 @@ object HexKeyMetrics {
     const val WIDTH_FRACTION = 1.0f
 
     /**
-     * Cap height as a fraction of the cell height.
+     * The regular hexagon's cap height as a fraction of the row pitch (a cell's height) — 4/3.
      *
      * 4/3 is the honeycomb's own proportion for rows staggered by half a key width: at that height
      * a cap's point reaches the shoulder line of the caps above, so the caps of the two rows meet
      * edge to edge and no surface between them is left over. That overhang into the row above and
      * below is what the interlock is made of, so shrinking this to 1.0 makes the caps neighbours
      * rather than a honeycomb.
+     *
+     * A pitch is always three quarters of a cap ([HexBoard.PITCH_CAP_FRACTION]), so this fraction
+     * is the same in every orientation. What an orientation changes is the cell's own aspect — how
+     * tall the pitch is against the cell's width — and the ratio it is sized from, below.
      */
     const val HEIGHT_FRACTION = 4f / 3f
+
+    /**
+     * Portrait's hexagon ratio — cap height as a fraction of the CELL WIDTH — 1.5, measured against
+     * the cell's width rather than its pitch because width is the axis portrait cannot move.
+     *
+     * Which axis is spent decides which ratio an orientation gets. Portrait is width-bound: QWERTY
+     * needs ten columns, so on a 1080 px screen the cell width is fixed at 108 px and can never
+     * grow — the height budget is the only free axis. The regular hexagon (ratio 1.1547) spends
+     * none of it, giving 108 x 124.7 caps and a 405 px block, 17% of a 2400 px screen; 1.5 spends
+     * it tall, giving 108 x 162 caps and a 526.5 px block, 22%. Landscape is the opposite — the
+     * display height cap spends the height — so it keeps the regular ratio (2/sqrt(3) = 1.1547) and
+     * buys width with the side bands instead. The letter grid is identical either way; only the
+     * cell's aspect moves. Read the two fractions as one relation: hexagon ratio =
+     * [HEIGHT_FRACTION] x pitch/cellWidth.
+     */
+    const val PORTRAIT_HEIGHT_FRACTION = 1.5f
 
     /**
      * The straight left/right edge, as a fraction of the cap's height.

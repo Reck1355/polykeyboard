@@ -9,21 +9,25 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * The keyboard's height cap, as pure measurements — no device.
+ * The keyboard's height share, as pure measurements — no device.
  *
  * The gap this closes: nothing capped the IME's height, so the keyboard view self-sized to the
  * board's natural 900 px block on a 2400 px wide landscape screen and the board filled the width
- * with no side margins — not the single uniformly scaled board that was approved. The approved
- * landscape render is a 594 px block, 55% of the 1080 px screen, giving 158.28 px cells with the
- * leftover width deliberately empty; portrait's natural block is 405 px of a 2400 px screen, well
- * under the cap, so the cap has to be a no-op there.
+ * with no side bands — not the single uniformly scaled board that was approved. The share is now
+ * [HexBoard.LANDSCAPE_HEIGHT_FRACTION], and it is deliberately *under* half: at 0.55 of a 1080 px
+ * landscape screen there was no room left to read what was being typed, and 0.45 gives the block
+ * 486 px, leaving 55% of the height to the app above. Portrait is uncapped — it is width-bound and
+ * its natural 526.5 px block is nowhere near any sane share — so the share has to be a no-op there.
  *
  * The screen the keyboard is drawn on is the viewport here: an IME keyboard spans the display's
- * width, and the cap is a share of the display's height. Every expectation is derived from the frozen
- * [HexBoard.LANDSCAPE_HEIGHT_FRACTION] and [HexBoard.BLOCK_HEIGHT_IN_CELLS] rather than restated, so
- * a drifted fraction or a stretched hexagon fails here instead of shipping.
+ * width, and the share is a fraction of the display's height. Every expectation is derived from
+ * [HexBoard.LANDSCAPE_HEIGHT_FRACTION] and the [HexBoard.sizing] a display's orientation yields,
+ * rather than restated, so a drifted fraction or a stretched hexagon fails here instead of shipping.
  */
 class HexBoardHeightCapTest {
+
+    private val portrait = HexBoard.sizing(HexBoard.Orientation.PORTRAIT)
+    private val landscape = HexBoard.sizing(HexBoard.Orientation.LANDSCAPE)
 
     /** The whole sizing path for a screen [displayWidth] x [displayHeight], reduced to its numbers. */
     private data class Measurement(
@@ -37,109 +41,131 @@ class HexBoardHeightCapTest {
         val heightBinds: Boolean,
     )
 
-    private fun measure(displayWidth: Float, displayHeight: Float): Measurement {
-        val available = HexBoard.cappedBoardHeight(displayWidth, displayHeight)
-        val placement = HexBoard.place(Layouts.HexQwertyEn, displayWidth, available)
+    private fun measure(
+        displayWidth: Float,
+        displayHeight: Float,
+        sizing: HexBoard.Sizing,
+    ): Measurement {
+        val available = HexBoard.cappedBoardHeight(displayWidth, displayHeight, sizing)
+        val placement = HexBoard.place(Layouts.HexQwertyEn, displayWidth, available, sizing)
         return Measurement(
             cellWidth = placement.cellWidth,
             blockHeight = placement.boardHeight,
             leftInset = placement.leftInset,
             rightBand = displayWidth - placement.boardWidth - placement.leftInset,
             scale = placement.scale,
-            capRatio = HexBoard.capHeight(HexBoard.cellHeight(placement.cellWidth)) / placement.cellWidth,
+            capRatio = HexBoard.capHeight(HexBoard.cellHeight(placement.cellWidth, sizing)) /
+                placement.cellWidth,
             availableHeight = available,
-            heightBinds = HexBoard.heightBinds(displayWidth, available),
+            heightBinds = HexBoard.heightBinds(displayWidth, available, sizing),
         )
     }
 
     @Test
-    fun `portrait is width-governed and its natural block sits far under the cap`() {
+    fun `portrait is width-governed and the height share is a no-op there`() {
         val displayHeight = 2400f
-        val cap = HexBoard.heightCap(displayHeight)
-        val naturalBlock = HexBoard.cappedBoardHeight(1080f, displayHeight)
+        val cap = HexBoard.heightCap(displayHeight, portrait)
+        val naturalBlock = HexBoard.cappedBoardHeight(1080f, displayHeight, portrait)
 
-        // The cap is a no-op in portrait: the board's own natural block is what comes back.
-        assertEquals(HexBoard.boardHeight(1080f), naturalBlock, 0.001f)
-        // And it is a small share of the cap, nowhere near it — 405 px against a 1320 px cap.
-        assertTrue("portrait block $naturalBlock vs cap $cap", naturalBlock < cap * 0.5f)
+        // Uncapped in portrait: the board's own natural block is what comes back, and the viewport
+        // height is the only bound — which this frame is nowhere near.
+        assertEquals(displayHeight, cap, 0.001f)
+        assertEquals(HexBoard.boardHeight(1080f, portrait), naturalBlock, 0.001f)
 
-        val portrait = measure(1080f, displayHeight)
-        // Width governs: ten 108 px cells span the 1080 px width exactly; the cap never binds.
-        assertFalse("the cap must not bind in portrait", portrait.heightBinds)
-        assertEquals(108f, portrait.cellWidth, 0.01f)
+        val measured = measure(1080f, displayHeight, portrait)
+        // Width governs: ten 108 px cells span the 1080 px width exactly; the height never binds.
+        assertFalse("the height must not bind in portrait", measured.heightBinds)
+        assertEquals(108f, measured.cellWidth, 0.01f)
         // It fills the width, so there is no side margin and it is drawn at full scale.
-        assertEquals(0f, portrait.leftInset, 0.01f)
-        assertEquals(0f, portrait.rightBand, 0.01f)
-        assertEquals(1f, portrait.scale, 0.001f)
-        // And the whole block is three and three quarter 108 px cells, comfortably inside the cap.
-        assertEquals(108f * HexBoard.BLOCK_HEIGHT_IN_CELLS, portrait.blockHeight, 0.01f)
-        assertTrue(portrait.blockHeight < cap)
+        assertEquals(0f, measured.leftInset, 0.01f)
+        assertEquals(0f, measured.rightBand, 0.01f)
+        assertEquals(1f, measured.scale, 0.001f)
+        // The whole block is 3.25 x 1.5 = 4.875 cells of 108 px, comfortably inside the frame.
+        assertEquals(108f * HexBoard.blockHeightInCells(portrait), measured.blockHeight, 0.01f)
+        assertEquals(526.5f, measured.blockHeight, 0.01f)
+        assertTrue(measured.blockHeight < cap)
     }
 
     @Test
-    fun `landscape is capped to the approved block and yields the approved cell`() {
+    fun `landscape is capped to 486 px - under half the screen - and yields the 129_5 px cell`() {
         val displayHeight = 1080f
-        // 55% of the screen, straight from the constant — the approved landscape share.
-        assertEquals(0.55f, HexBoard.LANDSCAPE_HEIGHT_FRACTION, 0f)
-        val cap = HexBoard.heightCap(displayHeight)
+        // 0.45 of the screen, straight from the constant — deliberately under half, so the app
+        // above keeps the rest and the words being typed stay visible.
+        assertEquals(0.45f, HexBoard.LANDSCAPE_HEIGHT_FRACTION, 0f)
+        val cap = HexBoard.heightCap(displayHeight, landscape)
+        assertEquals(486f, cap, 0.01f)
 
         // Uncapped, the width alone would decide a 240 px cell and a 900 px block that fills the
-        // width with no side margins — the defect.
+        // width with no side bands — the defect.
         assertEquals(240f, HexBoard.cellWidth(2400f), 0.01f)
-        assertEquals(240f * HexBoard.BLOCK_HEIGHT_IN_CELLS, HexBoard.boardHeight(2400f), 0.01f)
-        assertFalse(HexBoard.heightBinds(2400f, HexBoard.boardHeight(2400f)))
+        assertEquals(240f * HexBoard.blockHeightInCells(landscape), HexBoard.boardHeight(2400f, landscape), 0.01f)
+        assertFalse(HexBoard.heightBinds(2400f, HexBoard.boardHeight(2400f, landscape), landscape))
 
         // Under the cap the height is what binds, and the height the board is placed into is the
-        // cap itself: 55% of 1080 px is the approved 594 px block.
-        val available = HexBoard.cappedBoardHeight(2400f, displayHeight)
+        // cap itself: 0.45 of 1080 px is the 486 px block.
+        val available = HexBoard.cappedBoardHeight(2400f, displayHeight, landscape)
         assertEquals(cap, available, 0.001f)
-        assertTrue("the cap must bind in landscape", HexBoard.heightBinds(2400f, available))
+        assertTrue("the cap must bind in landscape", HexBoard.heightBinds(2400f, available, landscape))
 
-        val landscape = measure(2400f, displayHeight)
-        // The approved block, and the 158.28 px cell that falls out of it — neither is hard-coded
-        // anywhere; both are the cap divided by the frozen block height.
-        assertEquals(cap, landscape.blockHeight, 0.01f)
-        assertEquals(cap / HexBoard.BLOCK_HEIGHT_IN_CELLS, landscape.cellWidth, 0.01f)
-        assertEquals(1.1547f, landscape.capRatio, 0.0001f)
-        assertTrue(landscape.cellWidth < 240f)
+        val measured = measure(2400f, displayHeight, landscape)
+        // The approved block, and the 129.5041 px cell that falls out of it — neither is hard-coded
+        // anywhere; both are the cap divided by the derived block height, 3.25 x 1.1547 cells.
+        assertEquals(cap, measured.blockHeight, 0.01f)
+        assertEquals(cap / HexBoard.blockHeightInCells(landscape), measured.cellWidth, 0.001f)
+        assertEquals(129.5041f, measured.cellWidth, 0.001f)
+        assertEquals(1.1547f, measured.capRatio, 0.0001f)
+        assertTrue(measured.cellWidth < 240f)
 
-        // Centred, with the leftover width empty on both sides in equal bands.
-        assertEquals(landscape.leftInset, landscape.rightBand, 0.01f)
-        assertEquals(10f * landscape.cellWidth, 2400f - 2f * landscape.leftInset, 0.01f)
-        assertTrue("the side band is real", landscape.leftInset > 1f)
+        // The app keeps more than half the screen — the whole reason the share came down.
+        assertTrue("the app keeps over half", displayHeight - measured.blockHeight > displayHeight * 0.5f)
+
+        // Centred, with the leftover width empty on both sides in equal bands. Landscape is
+        // expected to change shape — a left/right split board — and this is the assertion that
+        // would move, on purpose, when it does.
+        assertEquals(measured.leftInset, measured.rightBand, 0.01f)
+        assertEquals(10f * measured.cellWidth, 2400f - 2f * measured.leftInset, 0.01f)
+        assertEquals(552.48f, measured.leftInset, 0.05f)
+        assertTrue("the side band is real", measured.leftInset > 1f)
     }
 
     @Test
-    fun `the hexagon ratio is the same in both orientations`() {
-        val portrait = measure(1080f, 2400f)
-        val landscape = measure(2400f, 1080f)
+    fun `the hexagon ratio is per orientation - tall in portrait, regular in landscape`() {
+        val portraitMeasured = measure(1080f, 2400f, portrait)
+        val landscapeMeasured = measure(2400f, 1080f, landscape)
 
-        // cap height = cap width x 1.1547 (= 2/sqrt(3)), identical in both: the one number that says
-        // the caps are regular hexagons and the honeycomb has not been stretched to fit.
-        assertEquals(1.1547f, portrait.capRatio, 0.0001f)
-        assertEquals(1.1547f, landscape.capRatio, 0.0001f)
-        assertEquals(2f / sqrt(3f), portrait.capRatio, 0.0001f)
-        assertEquals(2f / sqrt(3f), landscape.capRatio, 0.0001f)
-        // Identical to portrait to within a float's own last bit — the cells differ in size, so the
-        // division does not land on the same ULP, but the proportion is not what the orientation moves.
-        assertEquals(portrait.capRatio, landscape.capRatio, 0.0001f)
+        // Portrait spends its free height on a taller hexagon: cap height = 1.5 x cell width. This
+        // used to be asserted equal to landscape's 1.1547, which held only while both were regular.
+        assertEquals(1.5f, portraitMeasured.capRatio, 0.0001f)
+        assertEquals(HexKeyMetrics.PORTRAIT_HEIGHT_FRACTION, portraitMeasured.capRatio, 0.0001f)
+
+        // Landscape keeps the regular hexagon: cap height = 2/sqrt(3) = 1.1547 x cell width.
+        assertEquals(1.1547f, landscapeMeasured.capRatio, 0.0001f)
+        assertEquals(2f / sqrt(3f), landscapeMeasured.capRatio, 0.0001f)
+
+        // And they differ, deliberately — that is the point of the per-orientation ratio.
+        assertTrue(
+            "portrait's hexagon is taller than landscape's",
+            portraitMeasured.capRatio > landscapeMeasured.capRatio,
+        )
     }
 
     @Test
     fun `rotating portrait to landscape and back returns the first measurement exactly`() {
-        val portrait = measure(1080f, 2400f)
-        val landscape = measure(2400f, 1080f)
-        val portraitAgain = measure(1080f, 2400f)
+        val portraitBefore = measure(1080f, 2400f, portrait)
+        val landscapeMeasured = measure(2400f, 1080f, landscape)
+        val portraitAgain = measure(1080f, 2400f, portrait)
 
-        // The rotation really did re-size the board for the new screen ...
-        assertTrue("rotation changes the cell", abs(portrait.cellWidth - landscape.cellWidth) > 1f)
+        // The rotation really did re-size the board for the new screen, ratio and all ...
+        assertTrue("rotation changes the cell", abs(portraitBefore.cellWidth - landscapeMeasured.cellWidth) > 1f)
+        assertTrue("rotation changes the ratio", abs(portraitBefore.capRatio - landscapeMeasured.capRatio) > 0.1f)
         // ... and rotating back reproduces the first measurement exactly, with no stale size.
-        assertEquals(portrait.cellWidth, portraitAgain.cellWidth, 0f)
-        assertEquals(portrait.blockHeight, portraitAgain.blockHeight, 0f)
-        assertEquals(portrait.leftInset, portraitAgain.leftInset, 0f)
-        assertEquals(portrait.rightBand, portraitAgain.rightBand, 0f)
-        assertEquals(portrait.scale, portraitAgain.scale, 0f)
-        assertEquals(portrait.capRatio, portraitAgain.capRatio, 0f)
-        assertEquals(portrait.availableHeight, portraitAgain.availableHeight, 0f)
+        assertEquals(portraitBefore.cellWidth, portraitAgain.cellWidth, 0f)
+        assertEquals(portraitBefore.blockHeight, portraitAgain.blockHeight, 0f)
+        assertEquals(portraitBefore.leftInset, portraitAgain.leftInset, 0f)
+        assertEquals(portraitBefore.rightBand, portraitAgain.rightBand, 0f)
+        assertEquals(portraitBefore.scale, portraitAgain.scale, 0f)
+        assertEquals(portraitBefore.capRatio, portraitAgain.capRatio, 0f)
+        assertEquals(portraitBefore.availableHeight, portraitAgain.availableHeight, 0f)
+        assertEquals(portraitBefore.heightBinds, portraitAgain.heightBinds)
     }
 }
