@@ -8,6 +8,7 @@ import android.provider.Settings
 import android.view.inputmethod.InputMethodManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -15,6 +16,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.imePadding
@@ -55,22 +57,34 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.slide.asr.WhisperModel
+import com.slide.core.layout.Key
+import com.slide.core.layout.KeyType
+import com.slide.core.layout.Layouts
 import com.slide.core.settings.KeyboardSettings
+import com.slide.core.settings.KeyboardSize
 import com.slide.core.settings.SettingsRepository
 import com.slide.core.theme.ColourChoice
 import com.slide.core.theme.Colours
 import com.slide.core.theme.KeyboardColours
 import com.slide.engine.lexicon.UserDictionaryStore
+import com.slide.ime.view.HexBoard
+import com.slide.ime.view.KeyGeometry
 import java.io.IOException
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -128,9 +142,21 @@ private fun SetupScreen(repository: SettingsRepository) {
     // Sliders update visually under the finger and persist once the gesture settles. Writing
     // DataStore on every pixel of movement makes an otherwise simple settings screen feel laggy.
     var keyHeight by remember(settings.keyHeightScale) { mutableFloatStateOf(settings.keyHeightScale) }
+    // The keyboard-size stop moves under the finger and persists once the gesture settles, like the
+    // other sliders. It is a ladder position, not a size, so the state is the integer the setting
+    // stores and the geometry derives everything else from it.
+    var keyboardSizeStep by remember(settings.keyboardSizeStep) {
+        mutableIntStateOf(settings.keyboardSizeStep)
+    }
     var bottomPadding by remember(settings.bottomPaddingDp) { mutableFloatStateOf(settings.bottomPaddingDp) }
     var hapticStrength by remember(settings.hapticStrength) { mutableFloatStateOf(settings.hapticStrength) }
     var soundVolume by remember(settings.soundVolume) { mutableFloatStateOf(settings.soundVolume) }
+    // The palette every preview on this screen draws with, resolved once from the one stored colour
+    // choice — the same resolve the IME paints the board from and the Colours screen previews, so no
+    // preview here can disagree with the keyboard.
+    val boardColours = remember(settings.colourChoice) {
+        KeyboardColours.resolve(settings.colourChoice)
+    }
     // Which screen the activity is showing. The Colours picker is a full screen rather than a card,
     // so the hue strip, the lightness slider and the live palette all have room to breathe.
     var showColours by rememberSaveable { mutableStateOf(false) }
@@ -344,9 +370,7 @@ private fun SetupScreen(repository: SettingsRepository) {
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
-                    val current = remember(settings.colourChoice) {
-                        KeyboardColours.resolve(settings.colourChoice)
-                    }
+                    val current = boardColours
                     Row(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalAlignment = Alignment.CenterVertically,
@@ -419,6 +443,31 @@ private fun SetupScreen(repository: SettingsRepository) {
                             }
                         },
                     )
+                    SettingSlider(
+                        label = "Keyboard size",
+                        value = keyboardSizeStep.toFloat(),
+                        valueLabel = keyboardSizeLabel(keyboardSizeStep),
+                        valueRange = KeyboardSize.MIN_STEP.toFloat()..KeyboardSize.MAX_STEP.toFloat(),
+                        // Five stops, so three positions sit between the two ends.
+                        steps = KeyboardSize.MAX_STEP - KeyboardSize.MIN_STEP - 1,
+                        onValueChange = { keyboardSizeStep = it.roundToInt() },
+                        onValueChangeFinished = {
+                            scope.launch {
+                                repository.update { it.copy(keyboardSizeStep = keyboardSizeStep) }
+                            }
+                        },
+                    )
+                    Text(
+                        "Resizes the hex board itself. Portrait has the whole width already, so its " +
+                            "hexagons grow taller; landscape takes more of the screen, so the two " +
+                            "halves reach further in. Default draws the board as it was approved.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    // The preview resolves its colours the way the Colours screen does — through the
+                    // one stored choice — and asks the board's own geometry for its shape, so what
+                    // is shown is the board the keyboard will draw, not a picture of one.
+                    KeyboardSizePreview(step = keyboardSizeStep, colours = boardColours)
                     SettingSlider(
                         label = "Space below keys",
                         value = bottomPadding,
@@ -875,6 +924,132 @@ private fun PalettePreview(colours: List<Int>, size: Dp) {
 }
 
 /**
+ * The keyboard-size preview: the hex board at the slider's stop, drawn by the keyboard's own
+ * geometry.
+ *
+ * Nothing here is an illustration. [HexBoard.sizing] gives the step the sizing the keyboard derives,
+ * [HexBoard.cappedBoardHeight] gives the frame the keyboard would hand the board on each
+ * orientation's screen, and [HexBoard.place] with [KeyGeometry.hexShapeFor] hand back the caps the
+ * board is actually drawn from — so the picture is the arithmetic the IME runs, shown small. The
+ * colours come from the one resolved palette, the way the Colours screen's swatches do, and the
+ * letters sit where the geometry placed them.
+ *
+ * Both orientations are shown because the step spends them differently: portrait has no width left
+ * to give, so its hexagons grow taller and its box grows with them; landscape's share of the screen
+ * height is what the step multiplies, so its board visibly takes more of the width it is fitted to.
+ */
+@Composable
+private fun KeyboardSizePreview(step: Int, colours: KeyboardColours) {
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        BoardPreview(
+            label = "Portrait",
+            sizing = HexBoard.sizing(HexBoard.Orientation.PORTRAIT, step),
+            displayWidth = PORTRAIT_PREVIEW_WIDTH,
+            displayHeight = PORTRAIT_PREVIEW_HEIGHT,
+            colours = colours,
+        )
+        BoardPreview(
+            label = "Landscape",
+            sizing = HexBoard.sizing(HexBoard.Orientation.LANDSCAPE, step),
+            displayWidth = LANDSCAPE_PREVIEW_WIDTH,
+            displayHeight = LANDSCAPE_PREVIEW_HEIGHT,
+            colours = colours,
+        )
+    }
+}
+
+/** One orientation's board, at [sizing], in a box whose proportions are the board's own. */
+@Composable
+private fun BoardPreview(
+    label: String,
+    sizing: HexBoard.Sizing,
+    displayWidth: Float,
+    displayHeight: Float,
+    colours: KeyboardColours,
+) {
+    // The frame the keyboard would give the board on that screen — the natural block against the
+    // display-height share, resolved by the same call [KeyboardView] measures with — so the box is
+    // as tall as the board is and a bigger step draws a bigger board rather than a rescaled picture
+    // of one.
+    val availableHeight = HexBoard.cappedBoardHeight(displayWidth, displayHeight, sizing)
+    val textMeasurer = rememberTextMeasurer()
+    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Text(
+            label,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Canvas(
+            modifier = Modifier
+                .fillMaxWidth()
+                .aspectRatio(displayWidth / availableHeight),
+        ) {
+            val placement = HexBoard.place(Layouts.HexQwertyEn, size.width, size.height, sizing)
+            val boardBackground = Color(colours.palette.background)
+            placement.keys.forEach { placed ->
+                val vertices = KeyGeometry.hexShapeFor(placed).vertices()
+                val path = Path().apply {
+                    moveTo(vertices.first().x, vertices.first().y)
+                    for (index in 1 until vertices.size) {
+                        lineTo(vertices[index].x, vertices[index].y)
+                    }
+                    close()
+                }
+                drawPath(path, Color(hexFillFor(placed.key, colours)))
+                // The keyboard separates neighbouring caps by stroking them in the board's own
+                // background colour, because caps in a row share an edge exactly; drawing the same
+                // seam is what makes the preview read as the honeycomb instead of a filled slab.
+                drawPath(path, boardBackground, style = Stroke(width = PREVIEW_SEAM_PX))
+
+                val text = placed.key.outputText.takeIf { it.length == 1 && !it[0].isWhitespace() }
+                    ?: return@forEach
+                val measured = textMeasurer.measure(
+                    text.uppercase(),
+                    style = TextStyle(
+                        color = Color(colours.palette.label),
+                        // Half the row pitch, in the canvas's own pixels, so the letters keep their
+                        // proportion to the key however large the preview box is.
+                        fontSize = (placed.height * 0.5f).toSp(),
+                    ),
+                )
+                drawText(
+                    measured,
+                    topLeft = Offset(
+                        placed.centerX - measured.size.width / 2f,
+                        placed.centerY - measured.size.height / 2f,
+                    ),
+                )
+            }
+        }
+    }
+}
+
+/** The hex board's fills, read from the palette exactly as the keyboard's renderer reads them. */
+private fun hexFillFor(key: Key, colours: KeyboardColours): Int = when (key.type) {
+    KeyType.ENTER -> colours.palette.enterKey
+    KeyType.CHARACTER, KeyType.SPACE -> colours.palette.key
+    else -> colours.palette.specialKey
+}
+
+/**
+ * The stop's name and the size it draws at.
+ *
+ * The percentage is read from the ladder's own multiplier rather than written down beside it, so a
+ * label cannot come to disagree with the board it is describing; the step is clamped to the ladder
+ * first, which is what an out-of-range value would have been stored as.
+ */
+private fun keyboardSizeLabel(step: Int): String {
+    val name = when (KeyboardSize.clampStep(step)) {
+        KeyboardSize.MIN_STEP -> "Smallest"
+        KeyboardSize.DEFAULT_STEP - 1 -> "Smaller"
+        KeyboardSize.DEFAULT_STEP -> "Default"
+        KeyboardSize.DEFAULT_STEP + 1 -> "Larger"
+        else -> "Largest"
+    }
+    return "$name · ${(HexBoard.sizeMultiplier(step) * 100).roundToInt()}%"
+}
+
+/**
  * The Colours screen — the keyboard's one colour control.
  *
  * Everything here writes the stored choice the IME resolves its single palette from, and the live
@@ -1078,6 +1253,21 @@ private suspend inline fun <T> runCatchingCancellable(block: () -> T): Result<T>
 }
 
 private const val BYTES_PER_MB = 1_000_000L
+
+/**
+ * The screens the size preview draws its two boards on, in the units the geometry works in.
+ *
+ * A real phone's display: 1080 x 2400 portrait, 2400 x 1080 landscape. The geometry is asked for the
+ * frame the keyboard would give the board on those screens, so the preview boxes are the boards'
+ * own proportions — and the step's effect is the board growing, not the picture being stretched.
+ */
+private const val PORTRAIT_PREVIEW_WIDTH = 1080f
+private const val PORTRAIT_PREVIEW_HEIGHT = 2400f
+private const val LANDSCAPE_PREVIEW_WIDTH = 2400f
+private const val LANDSCAPE_PREVIEW_HEIGHT = 1080f
+
+/** Cap separation in the preview, on the preview's own scale — the keyboard's 1.5 px seam. */
+private const val PREVIEW_SEAM_PX = 1.5f
 
 private fun isKeyboardEnabled(context: Context): Boolean {
     val imm = context.getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager

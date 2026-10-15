@@ -2,6 +2,7 @@ package com.slide.ime.view
 
 import com.slide.core.layout.Key
 import com.slide.core.layout.KeyboardLayout
+import com.slide.core.settings.KeyboardSize
 import kotlin.math.min
 import kotlin.math.roundToInt
 import kotlin.math.sqrt
@@ -42,6 +43,14 @@ import kotlin.math.sqrt
  * the orientation again. The cell is the largest that fits, and whichever of width and height binds
  * decides the rest — none of the width is given away in portrait, and in landscape the leftover
  * width is the channel.
+ *
+ * The keyboard-size ladder is spent through that same seam. [sizeMultiplier] turns the user's stop
+ * ([KeyboardSize.STEPS]) into one multiplier, and each orientation spends it on the axis it has
+ * free: portrait multiplies its hexagon ratio, so a bigger step draws *taller* hexagons in the same
+ * ten columns; landscape multiplies its share of the display height, so a bigger step lifts the cap
+ * and the cell follows it down. There is no second place a size is decided — the view, the settings
+ * screen's preview and the tests all read [sizing], and [fittedSizing] is what holds the single
+ * board's hexagon to the height it has room for.
  */
 object HexBoard {
 
@@ -106,6 +115,10 @@ object HexBoard {
      * it. The cell only follows: 486 / 3.0875 cells is a 157.4 px cell, so each half of the split
      * reaches five of those, 787 px, from its own edge, and the channel they leave down the middle is
      * 747 px.
+     *
+     * This is the *base* share, the approved board's own. The keyboard-size ladder multiplies it
+     * ([sizing] at a given step), so the five stops give 0.36 / 0.405 / 0.45 / 0.495 / 0.54 of the
+     * display height and nothing restates any of them: the step reaches the board here and only here.
      */
     const val LANDSCAPE_HEIGHT_FRACTION = 0.45f
 
@@ -148,7 +161,24 @@ object HexBoard {
     data class Sizing(val heightFraction: Float, val heightRatio: Float, val split: Boolean = false)
 
     /**
-     * The board's geometry for [orientation] — the only place either orientation is described.
+     * The keyboard-size ladder's multiplier for a stored [step] — 1 + step/10, so the five stops
+     * are 0.8 / 0.9 / 1.0 / 1.1 / 1.2 and [KeyboardSize.DEFAULT_STEP] is exactly 1.
+     *
+     * One multiplier, one seam. The step is clamped to the ladder first ([KeyboardSize.clampStep]),
+     * so a step from outside the range is *held* rather than accepted: a corrupt 7 draws the largest
+     * board, never a board bigger than the ladder allows.
+     *
+     * The two orientations spend this differently and neither is restated downstream — portrait
+     * multiplies its hexagon ratio (1.2 .. 1.8), landscape its share of the display height
+     * (0.36 .. 0.54) — because the whole point of the ladder is that the size is one number and the
+     * board's shape is what each orientation does with it.
+     */
+    fun sizeMultiplier(step: Int): Float =
+        1f + KeyboardSize.clampStep(step) * KeyboardSize.STEP_GAIN
+
+    /**
+     * The board's geometry for [orientation] at keyboard-size [step] — the only place either
+     * orientation is described.
      *
      * Landscape is the two-handed split: [Sizing.split] is true, so [place] lays the same letters out
      * as a left half anchored to the left edge and a right half anchored to the right, one
@@ -160,22 +190,58 @@ object HexBoard {
      * 2400 px screen) is nowhere near a sane share. Capping it would be the one thing that could
      * *shrink* the portrait keys, which is the opposite of what portrait was asked for. Its split is
      * false, and that is asserted, so the landscape split cannot leak into it.
+     *
+     * The size ladder is spent on the free axis, per orientation: portrait's ratio is
+     * [HexKeyMetrics.PORTRAIT_HEIGHT_FRACTION] x multiplier, so a bigger step makes the hexagons
+     * taller and nothing else; landscape's share is [LANDSCAPE_HEIGHT_FRACTION] x multiplier, so a
+     * bigger step lifts the cap the flat hexagon is fitted into. [fittedSizing] is what stops the
+     * taller portrait block from overrunning a frame that cannot hold it.
      */
-    fun sizing(orientation: Orientation): Sizing = when (orientation) {
-        Orientation.PORTRAIT -> Sizing(
-            heightFraction = 1f,
-            heightRatio = HexKeyMetrics.PORTRAIT_HEIGHT_FRACTION,
-            split = false,
-        )
-        Orientation.LANDSCAPE -> Sizing(
-            heightFraction = LANDSCAPE_HEIGHT_FRACTION,
-            heightRatio = LANDSCAPE_HEIGHT_RATIO,
-            split = true,
-        )
+    fun sizing(orientation: Orientation, step: Int = KeyboardSize.DEFAULT_STEP): Sizing {
+        val multiplier = sizeMultiplier(step)
+        return when (orientation) {
+            Orientation.PORTRAIT -> Sizing(
+                heightFraction = 1f,
+                heightRatio = HexKeyMetrics.PORTRAIT_HEIGHT_FRACTION * multiplier,
+                split = false,
+            )
+            Orientation.LANDSCAPE -> Sizing(
+                heightFraction = LANDSCAPE_HEIGHT_FRACTION * multiplier,
+                heightRatio = LANDSCAPE_HEIGHT_RATIO,
+                split = true,
+            )
+        }
     }
 
-    /** The hexagon ratio (cap height / cell width) for [orientation]. */
-    fun heightRatio(orientation: Orientation): Float = sizing(orientation).heightRatio
+    /**
+     * [sizing] as it can actually be drawn in a viewport [viewportWidth] x [availableHeight] — the
+     * single board's hexagon held to the height there is room for.
+     *
+     * Portrait is width-bound: ten columns already spend the whole width, so the only axis a bigger
+     * step can spend is the height, and the hexagon ratio is therefore the one number with a ceiling
+     * — `BLOCK_CAP_FACTOR x ratio x cell` may never be taller than the frame. When it would be, the
+     * ratio comes down to exactly what fits and the cell does not move: the board keeps spanning the
+     * width it has always spanned and its hexagons flatten, instead of the board shrinking into a
+     * centred strip with margins either side.
+     *
+     * Only the single board is clamped. The split is height-bound in the opposite direction — its
+     * share of the display height *is* the cap and the cell follows from it — so nothing there can
+     * overrun and there is nothing to clamp.
+     */
+    fun fittedSizing(sizing: Sizing, viewportWidth: Float, availableHeight: Float): Sizing {
+        if (sizing.split) return sizing
+        if (viewportWidth <= 0f || !viewportWidth.isFinite()) return sizing
+        if (availableHeight <= 0f || !availableHeight.isFinite()) return sizing
+        val cellWidth = viewportWidth / widthInCells(sizing)
+        if (cellWidth <= 0f) return sizing
+        val fittingRatio = availableHeight / (BLOCK_CAP_FACTOR * cellWidth)
+        if (fittingRatio >= sizing.heightRatio) return sizing
+        return sizing.copy(heightRatio = fittingRatio)
+    }
+
+    /** The hexagon ratio (cap height / cell width) for [orientation] at keyboard-size [step]. */
+    fun heightRatio(orientation: Orientation, step: Int = KeyboardSize.DEFAULT_STEP): Float =
+        sizing(orientation, step).heightRatio
 
     // --- The two-handed split (landscape only) -------------------------------------------------
 
@@ -403,6 +469,12 @@ object HexBoard {
      * The single board is centred rather than left-aligned because the empty space either side of a
      * scaled-down board is a margin, and a margin that only appears on the right looks like a bug; on
      * the split the empty space is the channel, between the halves and by design.
+     *
+     * The sizing is passed through [fittedSizing] first, once, and everything below — the cell, the
+     * rows, the block the placement reports — is read from what comes back. That is what makes the
+     * portrait clamp a single seam rather than a check somebody has to remember: a stepped-up board
+     * in a frame too short for it comes out with its ten columns intact and its hexagons flattened,
+     * and the placement's own [HexPlacement.sizing] is the geometry it was actually drawn at.
      */
     fun place(
         layout: KeyboardLayout,
@@ -411,11 +483,12 @@ object HexBoard {
         sizing: Sizing,
         topOffset: Float = 0f,
     ): HexPlacement {
-        if (sizing.split) return placeSplit(layout, viewportWidth, availableHeight, sizing, topOffset)
-        val cellWidth = cellWidthFor(viewportWidth, availableHeight, sizing)
+        val drawn = fittedSizing(sizing, viewportWidth, availableHeight)
+        if (drawn.split) return placeSplit(layout, viewportWidth, availableHeight, drawn, topOffset)
+        val cellWidth = cellWidthFor(viewportWidth, availableHeight, drawn)
         val boardWidth = cellWidth * COLUMNS
         val leftInset = ((viewportWidth - boardWidth) * 0.5f).coerceAtLeast(0f)
-        val cellHeight = cellHeight(cellWidth, sizing)
+        val cellHeight = cellHeight(cellWidth, drawn)
         val placed = KeyGeometry.place(
             layout = layout,
             width = boardWidth,
@@ -429,10 +502,10 @@ object HexBoard {
             cellWidth = cellWidth,
             boardWidth = boardWidth,
             // The block is a fixed number of cells tall, so it scales with the cell exactly.
-            boardHeight = blockHeight(cellWidth, sizing),
+            boardHeight = blockHeight(cellWidth, drawn),
             leftInset = leftInset,
             scale = if (naturalCell > 0f) cellWidth / naturalCell else 1f,
-            sizing = sizing,
+            sizing = drawn,
             keys = placed,
         )
     }

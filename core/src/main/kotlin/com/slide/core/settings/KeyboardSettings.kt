@@ -70,6 +70,17 @@ data class KeyboardSettings(
     val showNumberRow: Boolean = true,
     /** Multiplier on the default key height, 0.7–1.4. */
     val keyHeightScale: Float = 1f,
+    /**
+     * The keyboard-size ladder stop — [KeyboardSize.MIN_STEP]..[KeyboardSize.MAX_STEP], with
+     * [KeyboardSize.DEFAULT_STEP] the board exactly as it was approved.
+     *
+     * One stop of the ladder is one tenth of the size. `HexBoard.sizeMultiplier` reads it, so a
+     * single multiplier derives both orientations at once: portrait's hexagon height and landscape's
+     * share of the display height. It is stored as the integer stop rather than as a multiplier so
+     * the control's five positions are exactly recoverable and a hand-edited value can be clamped
+     * back to the ladder instead of quietly resizing the board to something nobody chose.
+     */
+    val keyboardSizeStep: Int = KeyboardSize.DEFAULT_STEP,
     /** Extra space below the keyboard in dp, for gesture-nav comfort. */
     val bottomPaddingDp: Float = 0f,
     val hapticEnabled: Boolean = true,
@@ -262,7 +273,7 @@ internal fun isBackupEligibleSetting(name: String, value: Any): Boolean = when (
     "key_height_scale", "bottom_padding_dp", "haptic_strength", "sound_volume" -> value is Float
     "colour_seed_hue", "colour_seed_saturation", "colour_seed_lightness" -> value is Float
     "learned_data_clear_epoch" -> value is Long
-    "emoji_skin_tone" -> value is Int
+    "emoji_skin_tone", "keyboard_size_step" -> value is Int
     "follow_system_dark",
     "key_borders",
     "key_preview",
@@ -579,6 +590,7 @@ private object Keys {
     val KEY_PREVIEW = booleanPreferencesKey("key_preview")
     val NUMBER_ROW = booleanPreferencesKey("number_row")
     val KEY_HEIGHT = floatPreferencesKey("key_height_scale")
+    val KEYBOARD_SIZE_STEP = intPreferencesKey("keyboard_size_step")
     val BOTTOM_PADDING = floatPreferencesKey("bottom_padding_dp")
     val HAPTIC = booleanPreferencesKey("haptic_enabled")
     val HAPTIC_STRENGTH = floatPreferencesKey("haptic_strength")
@@ -610,6 +622,7 @@ internal fun MutablePreferences.writeKeyboardSettings(updated: KeyboardSettings)
     this[Keys.KEY_PREVIEW] = updated.showKeyPreview
     this[Keys.NUMBER_ROW] = updated.showNumberRow
     this[Keys.KEY_HEIGHT] = updated.keyHeightScale
+    this[Keys.KEYBOARD_SIZE_STEP] = updated.keyboardSizeStep
     this[Keys.BOTTOM_PADDING] = updated.bottomPaddingDp
     this[Keys.HAPTIC] = updated.hapticEnabled
     this[Keys.HAPTIC_STRENGTH] = updated.hapticStrength
@@ -642,6 +655,7 @@ internal fun Preferences.toKeyboardSettings(): KeyboardSettings {
         showKeyPreview = this[Keys.KEY_PREVIEW] ?: defaults.showKeyPreview,
         showNumberRow = this[Keys.NUMBER_ROW] ?: defaults.showNumberRow,
         keyHeightScale = boundedFloat(Keys.KEY_HEIGHT, defaults.keyHeightScale, 0.7f..1.4f),
+        keyboardSizeStep = boundedInt(Keys.KEYBOARD_SIZE_STEP, defaults.keyboardSizeStep, KeyboardSize.STEPS),
         bottomPaddingDp = boundedFloat(Keys.BOTTOM_PADDING, defaults.bottomPaddingDp, 0f..32f),
         hapticEnabled = this[Keys.HAPTIC] ?: defaults.hapticEnabled,
         hapticStrength = boundedFloat(Keys.HAPTIC_STRENGTH, defaults.hapticStrength, 0f..1f),
@@ -672,3 +686,16 @@ private fun Preferences.boundedFloat(
     val value = this[key] ?: return fallback
     return if (value.isFinite()) value.coerceIn(range.start, range.endInclusive) else fallback
 }
+
+/**
+ * An integer setting is held to its range rather than trusted.
+ *
+ * The keyboard-size stop is a position on a five-stop ladder, so an out-of-range number — a
+ * hand-edited file, a value written by a future build — has to land on the nearest stop the board
+ * can actually be drawn at instead of deriving a size nobody asked for.
+ */
+private fun Preferences.boundedInt(
+    key: Preferences.Key<Int>,
+    fallback: Int,
+    range: IntRange,
+): Int = (this[key] ?: fallback).coerceIn(range.first, range.last)

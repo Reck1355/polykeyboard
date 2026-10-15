@@ -106,7 +106,11 @@ class KeyboardView @JvmOverloads constructor(
         set(value) {
             val heightChanged = field.keyHeightScale != value.keyHeightScale ||
                 field.bottomPaddingDp != value.bottomPaddingDp ||
-                field.showNumberRow != value.showNumberRow
+                field.showNumberRow != value.showNumberRow ||
+                // The keyboard-size ladder resizes the hex board, so a step change has to re-measure
+                // as surely as a height change: without this the new size would wait for some
+                // unrelated layout pass, which reads as the slider having done nothing.
+                field.keyboardSizeStep != value.keyboardSizeStep
             field = value
             if (heightChanged) requestLayout()
             invalidate()
@@ -485,12 +489,17 @@ class KeyboardView @JvmOverloads constructor(
     private fun displayHeight(): Float = resources.displayMetrics.heightPixels.toFloat()
 
     /**
-     * The board's sizing for the display's current orientation.
+     * The board's sizing for the display's current orientation, at the user's keyboard-size stop.
      *
      * The hexagon ratio is per orientation because the two axes are spent in opposite ways — see
      * [HexKeyMetrics.PORTRAIT_HEIGHT_FRACTION] and [HexBoard.LANDSCAPE_HEIGHT_RATIO]. Portrait is the
      * default: only a landscape display gets the flat hexagon and the split board, and a configuration
      * the runtime has not settled yet behaves like portrait rather than picking a ratio at random.
+     *
+     * The size step comes from the settings the IME hands this view, so the slider on the settings
+     * screen resizes the running keyboard through the same setting the colour choice travels on. The
+     * clamp a step may need is not applied here: [HexBoard.place] holds the single board's hexagon to
+     * the frame it is given, so this view asks for a size and the geometry says what can be drawn.
      */
     private fun hexOrientation(): HexBoard.Orientation =
         if (resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE) {
@@ -498,6 +507,10 @@ class KeyboardView @JvmOverloads constructor(
         } else {
             HexBoard.Orientation.PORTRAIT
         }
+
+    /** The sizing the board is measured and placed at, at the user's keyboard-size stop. */
+    private fun hexSizing(): HexBoard.Sizing =
+        HexBoard.sizing(hexOrientation(), settings.keyboardSizeStep)
 
     override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
         val width = MeasureSpec.getSize(widthMeasureSpec)
@@ -515,10 +528,11 @@ class KeyboardView @JvmOverloads constructor(
             // than the capped board - a keyboard sitting under a taller app - and then it is the frame
             // that decides. In either case the board scales uniformly into what is left, at the
             // hexagon ratio and shape the orientation calls for: tall and single in portrait, flat
-            // and split in landscape.
-            val orientation = hexOrientation()
+            // and split in landscape. The size ladder only moves the number this block comes out at:
+            // a bigger step is a taller portrait block or a larger landscape share, and this is the
+            // one place the keyboard's own height is measured from it.
             val natural = topPadding + header +
-                HexBoard.cappedBoardHeight(width.toFloat(), displayHeight(), HexBoard.sizing(orientation)) +
+                HexBoard.cappedBoardHeight(width.toFloat(), displayHeight(), hexSizing()) +
                 bottomInset()
             if (MeasureSpec.getMode(heightMeasureSpec) == MeasureSpec.UNSPECIFIED) {
                 natural
@@ -597,7 +611,7 @@ class KeyboardView @JvmOverloads constructor(
             layout,
             viewWidth,
             availableHeight,
-            HexBoard.sizing(hexOrientation()),
+            hexSizing(),
             topOffset,
         )
         hexScale = placement.scale

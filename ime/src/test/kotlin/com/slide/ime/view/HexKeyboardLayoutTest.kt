@@ -403,24 +403,49 @@ class HexKeyboardLayoutTest {
     }
 
     @Test
-    fun `a frame shorter than the board scales the whole board instead of stretching its hexagon`() {
+    fun `a frame shorter than the board flattens its hexagon instead of giving up the columns`() {
         val natural = HexBoard.boardHeight(boardWidth, portrait)
 
         val whole = placement(sizing = portrait, availableHeight = natural)
         assertEquals(1f, whole.scale, 0.0001f)
         assertEquals(cellWidth, whole.cellWidth, 0.01f)
         assertTrue(whole.spansViewport)
+        assertEquals(portraitRatio, whole.sizing.heightRatio, 0.0001f)
 
+        // Portrait is width-bound — ten columns already spend the whole width — so the only axis a
+        // short frame can take anything from is the height, and what comes down is the hexagon.
+        //
+        // This test used to assert the *whole board* scaling to 0.8: an 86.4 px cell, side margins,
+        // and the ratio kept at 1.5. That is what the board did before the size clamp, and a bigger
+        // user-chosen step is exactly the case it fails — a stepped-up board on a short frame would
+        // have been drawn narrower than the screen instead of with taller keys. Rewritten, not
+        // dropped: the columns keeping the width is the promise, so the cell's width is asserted
+        // where the shrink factor used to be, and the ratio is now the thing that moves.
         val cramped = placement(sizing = portrait, availableHeight = natural * 0.8f)
-        assertEquals(0.8f, cramped.scale, 0.0001f)
-        assertEquals(cellWidth * 0.8f, cramped.cellWidth, 0.01f)
-        // The block now fits the frame it was given, exactly: the height is what binds.
+        assertEquals("the board is still drawn at full scale", 1f, cramped.scale, 0.0001f)
+        assertEquals("the cell is still the width's", cellWidth, cramped.cellWidth, 0.01f)
+        assertTrue("the board still spans the width", cramped.spansViewport)
+        assertEquals("no side margin opens up", 0f, cramped.leftInset, 0.01f)
+        // The block fits the frame exactly, by lowering the ratio to what fits: the block is
+        // 3.25 x ratio x cell, and that is the frame — so the width was never the thing that gave.
         assertEquals(natural * 0.8f, cramped.boardHeight, 0.01f)
-        assertTrue(HexBoard.heightBinds(boardWidth, natural * 0.8f, portrait))
-        // Both axes take the same factor, so the hexagon's proportion is never the thing that
-        // gives — it just gets smaller, at the ratio the orientation asked for.
-        assertEquals(portraitRatio, scale(cramped.cellWidth, portrait), 0.0001f)
-        assertEquals(scale(cramped.cellWidth, portrait), scale(cellWidth, portrait), 0.0001f)
+        assertEquals(
+            natural * 0.8f / (HexBoard.BLOCK_CAP_FACTOR * cramped.cellWidth),
+            cramped.sizing.heightRatio,
+            0.0001f,
+        )
+        // The clamp is a ceiling, never a raise — it only ever comes down from the orientation's
+        // ratio, and only when the frame cannot hold the block.
+        assertTrue(
+            "the clamp lowered the ratio: ${cramped.sizing.heightRatio} < $portraitRatio",
+            cramped.sizing.heightRatio < portraitRatio,
+        )
+        // And the caps are drawn at the ratio the placement reports, so a clamped board is still a
+        // honeycomb — flatter, not stretched.
+        assertEquals(portraitRatio, scale(cellWidth, portrait), 0.0001f)
+        assertEquals(cramped.sizing.heightRatio, scale(cramped.cellWidth, cramped.sizing), 0.0001f)
+        // A frame with room for the board leaves the ratio exactly alone.
+        assertEquals(portraitRatio, whole.sizing.heightRatio, 0f)
     }
 
     @Test

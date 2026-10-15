@@ -3,6 +3,7 @@ package com.slide.core.settings
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.emptyPreferences
 import androidx.datastore.preferences.core.floatPreferencesKey
+import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.mutablePreferencesOf
 import androidx.datastore.preferences.core.stringPreferencesKey
@@ -379,6 +380,28 @@ class KeyboardSettingsTest {
     }
 
     @Test
+    fun `the keyboard size stop round-trips and a stored value outside the ladder lands on a stop`() {
+        // The step is stored as the integer stop under one key, in the same file as every other
+        // setting — which is what makes it live to a running keyboard and eligible for backup.
+        val key = intPreferencesKey("keyboard_size_step")
+        val written = mutablePreferencesOf()
+        written.writeKeyboardSettings(KeyboardSettings(keyboardSizeStep = KeyboardSize.MAX_STEP))
+        assertEquals(KeyboardSize.MAX_STEP, written[key])
+        assertEquals(KeyboardSize.MAX_STEP, written.toPreferences().toKeyboardSettings().keyboardSizeStep)
+
+        // A value outside the ladder — hand-edited, restored from an older backup, or written by
+        // something that only knows the key — is held to the nearest stop rather than accepted: the
+        // keyboard must not resize to a size nobody chose, and the largest stop is the ceiling.
+        assertEquals(KeyboardSize.MAX_STEP, mutablePreferencesOf(key to 7).toKeyboardSettings().keyboardSizeStep)
+        assertEquals(KeyboardSize.MIN_STEP, mutablePreferencesOf(key to -9).toKeyboardSettings().keyboardSizeStep)
+        assertEquals(KeyboardSize.DEFAULT_STEP, mutablePreferencesOf(key to 0).toKeyboardSettings().keyboardSizeStep)
+
+        // Never stored at all, the board is the approved one.
+        assertEquals(KeyboardSize.DEFAULT_STEP, mutablePreferencesOf().toKeyboardSettings().keyboardSizeStep)
+        assertEquals(KeyboardSize.DEFAULT_STEP, KeyboardSettings().keyboardSizeStep)
+    }
+
+    @Test
     fun `every settings field survives a write and read round trip`() {
         val defaults = KeyboardSettings()
         val modified = KeyboardSettings(
@@ -407,6 +430,7 @@ class KeyboardSettingsTest {
             autoCapitalize = false,
             doubleSpacePeriod = false,
             emojiSkinTone = 3,
+            keyboardSizeStep = KeyboardSize.MAX_STEP,
             updateChecksEnabled = true,
             includeAlphaUpdates = true,
         )
