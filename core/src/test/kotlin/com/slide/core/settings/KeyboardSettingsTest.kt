@@ -383,6 +383,10 @@ class KeyboardSettingsTest {
         val defaults = KeyboardSettings()
         val modified = KeyboardSettings(
             themeId = "midnight",
+            colourPresetId = "cobalt",
+            colourSeedHue = 200f,
+            colourSeedSaturation = 0.7f,
+            colourSeedLightness = 0.4f,
             followSystemDarkMode = false,
             showKeyBorders = true,
             showKeyPreview = false,

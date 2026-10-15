@@ -18,6 +18,8 @@ import android.widget.Switch
 import android.widget.TextView
 import androidx.core.graphics.ColorUtils
 import com.slide.core.settings.KeyboardSettings
+import com.slide.core.theme.ColourPreset
+import com.slide.core.theme.Colours
 import com.slide.core.theme.KeyboardTheme
 import com.slide.core.theme.Themes
 
@@ -59,7 +61,7 @@ class KeyboardSettingsPanelView(context: Context) : LinearLayout(context) {
     private val dividers = mutableListOf<View>()
     private val switches = mutableListOf<ToggleBinding>()
     private val sliders = mutableListOf<SliderBinding>()
-    private val themeChips = linkedMapOf<ThemeOption, TextView>()
+    private val colourChips = linkedMapOf<ColourPreset, TextView>()
     private var binding = false
 
     private val backButton = BackIconView(context).apply {
@@ -99,8 +101,8 @@ class KeyboardSettingsPanelView(context: Context) : LinearLayout(context) {
         }
         addView(scroll, LayoutParams(LayoutParams.MATCH_PARENT, 0, 1f))
 
-        addSection(body, "Theme")
-        addThemePicker(body)
+        addSection(body, "Colours")
+        addColourPicker(body)
         addSection(body, "Typing")
         addToggle(body, "Gesture typing", read = { it.gestureTypingEnabled }) { value, checked ->
             value.copy(gestureTypingEnabled = checked)
@@ -200,29 +202,34 @@ class KeyboardSettingsPanelView(context: Context) : LinearLayout(context) {
         applyTheme()
     }
 
-    private fun addThemePicker(parent: LinearLayout) {
+    /**
+     * The colour presets, jade first. Each chip writes [KeyboardSettings.colourPresetId] — the one
+     * colour control the board and the chrome both resolve from — so this picker and the settings
+     * app's Colours screen can never disagree about which palette is chosen.
+     */
+    private fun addColourPicker(parent: LinearLayout) {
         val row = LinearLayout(context).apply {
             orientation = HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
             setPadding(0, 0, 0, dp(8f))
         }
-        themeOptions().forEach { option ->
+        Colours.presets.forEach { preset ->
             val chip = TextView(context).apply {
-                text = option.label
+                text = preset.name
                 gravity = Gravity.CENTER
                 setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
                 setPadding(dp(13f), 0, dp(13f), 0)
                 minWidth = dp(64f)
-                contentDescription = "${option.label} theme"
+                contentDescription = "${preset.name} colour"
                 isClickable = true
                 isFocusable = true
                 setOnClickListener {
-                    val change = { current: KeyboardSettings -> current.copy(themeId = option.id) }
+                    val change = { current: KeyboardSettings -> current.copy(colourPresetId = preset.id) }
                     settings = change(settings)
                     listener?.onKeyboardSettingsChanged(change)
                 }
             }
-            themeChips[option] = chip
+            colourChips[preset] = chip
             row.addView(
                 chip,
                 LayoutParams(LayoutParams.WRAP_CONTENT, dp(38f)).apply {
@@ -519,19 +526,17 @@ class KeyboardSettingsPanelView(context: Context) : LinearLayout(context) {
     }
 
     private fun applyThemeChips() {
-        themeChips.forEach { (option, chip) ->
-            val selected = settings.themeId == option.id
-            val fill = option.theme?.keyBackground ?: keyboardTheme.accentBackground
-            val text = option.theme?.keyText ?: keyboardTheme.accentText
-            chip.setTextColor(text)
+        colourChips.forEach { (preset, chip) ->
+            val selected = settings.colourPresetId == preset.id
+            chip.setTextColor(preset.palette.label)
             chip.setTypeface(
                 chip.typeface,
                 if (selected) android.graphics.Typeface.BOLD else android.graphics.Typeface.NORMAL,
             )
-            chip.contentDescription = "${option.label} theme" + if (selected) ", selected" else ""
+            chip.contentDescription = "${preset.name} colour" + if (selected) ", selected" else ""
             chip.background = GradientDrawable().apply {
                 cornerRadius = dp(19f).toFloat()
-                setColor(fill)
+                setColor(preset.palette.key)
                 setStroke(
                     dp(if (selected) 2f else 1f),
                     if (selected) keyboardTheme.accentBackground else keyboardTheme.divider,
@@ -545,10 +550,6 @@ class KeyboardSettingsPanelView(context: Context) : LinearLayout(context) {
         cornerRadius = radius
         setColor(color)
     }
-
-    private fun themeOptions(): List<ThemeOption> =
-        listOf(ThemeOption(Themes.ID_DYNAMIC, "Dynamic", null)) +
-            Themes.presets.map { ThemeOption(it.id, it.name, it) }
 
     private data class ToggleBinding(
         val row: View,
@@ -577,12 +578,6 @@ class KeyboardSettingsPanelView(context: Context) : LinearLayout(context) {
         val formatValue: (Float) -> String,
         val enabledWhen: (KeyboardSettings) -> Boolean,
         var lastPublishedProgress: Int,
-    )
-
-    private data class ThemeOption(
-        val id: String,
-        val label: String,
-        val theme: KeyboardTheme?,
     )
 }
 

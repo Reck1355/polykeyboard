@@ -32,15 +32,18 @@ class KeyboardSettingsPanelTest {
     )
 
     @Test
-    fun themeChipPreservesNewerPrivacyAndAppPreferences() = onMainThread {
+    fun colourChipPreservesNewerPrivacyAndAppPreferences() = onMainThread {
         val changes = mutableListOf<(KeyboardSettings) -> KeyboardSettings>()
         val panel = panelRecording(changes)
 
-        assertTrue(panel.control("Light theme").performClick())
+        assertTrue(panel.control("Light colour").performClick())
 
-        assertEquals(Themes.ID_LIGHT, panel.settings.themeId)
+        assertEquals("light", panel.settings.colourPresetId)
         assertEquals(1, changes.size)
-        assertEquals(newerSettings.copy(themeId = Themes.ID_LIGHT), changes.single()(newerSettings))
+        assertEquals(
+            newerSettings.copy(colourPresetId = "light"),
+            changes.single()(newerSettings),
+        )
     }
 
     @Test

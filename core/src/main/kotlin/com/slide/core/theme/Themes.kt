@@ -1,7 +1,6 @@
 package com.slide.core.theme
 
 import android.content.Context
-import android.graphics.Color
 import android.os.Build
 import androidx.core.graphics.ColorUtils
 
@@ -177,8 +176,11 @@ object Themes {
     /**
      * Derives a full theme from one seed background colour by shifting lightness, so presets stay
      * internally consistent instead of drifting apart as they are hand-tuned.
+     *
+     * [Colours] reuses this for a user's custom seed, so the picker's palette is derived by the
+     * same machinery the built-in presets are, not by a second colour algorithm.
      */
-    private fun solidTheme(id: String, name: String, seed: Int, dark: Boolean): KeyboardTheme {
+    internal fun solidTheme(id: String, name: String, seed: Int, dark: Boolean): KeyboardTheme {
         val keyBg = seed.shiftLightness(if (dark) +0.07f else +0.06f)
         val specialBg = seed.shiftLightness(if (dark) -0.03f else -0.05f)
         val accent = seed.saturate(0.55f).withLightness(if (dark) 0.72f else 0.32f)
@@ -210,24 +212,12 @@ object Themes {
         )
     }
 
-    private fun Int.shiftLightness(delta: Float): Int {
-        val hsl = FloatArray(3)
-        ColorUtils.colorToHSL(this, hsl)
-        hsl[2] = (hsl[2] + delta).coerceIn(0f, 1f)
-        return ColorUtils.HSLToColor(hsl) or (Color.alpha(this) shl 24)
-    }
+    // The three lightness/saturation operations live in [Hsl] so the same machinery derives the
+    // built-in presets and the user's palette, and can be exercised in a pure JVM test — ColorUtils
+    // reaches android.graphics.Color, which is not mocked off-device.
+    private fun Int.shiftLightness(delta: Float): Int = Hsl.shiftLightness(this, delta)
 
-    private fun Int.withLightness(lightness: Float): Int {
-        val hsl = FloatArray(3)
-        ColorUtils.colorToHSL(this, hsl)
-        hsl[2] = lightness.coerceIn(0f, 1f)
-        return ColorUtils.HSLToColor(hsl)
-    }
+    private fun Int.withLightness(lightness: Float): Int = Hsl.withLightness(this, lightness)
 
-    private fun Int.saturate(saturation: Float): Int {
-        val hsl = FloatArray(3)
-        ColorUtils.colorToHSL(this, hsl)
-        hsl[1] = saturation.coerceIn(0f, 1f)
-        return ColorUtils.HSLToColor(hsl)
-    }
+    private fun Int.saturate(saturation: Float): Int = Hsl.saturate(this, saturation)
 }

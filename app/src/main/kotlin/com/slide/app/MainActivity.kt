@@ -59,6 +59,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -66,7 +67,9 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.slide.asr.WhisperModel
 import com.slide.core.settings.KeyboardSettings
 import com.slide.core.settings.SettingsRepository
-import com.slide.core.theme.Themes
+import com.slide.core.theme.ColourChoice
+import com.slide.core.theme.Colours
+import com.slide.core.theme.KeyboardColours
 import com.slide.engine.lexicon.UserDictionaryStore
 import java.io.IOException
 import kotlinx.coroutines.CancellationException
@@ -128,6 +131,9 @@ private fun SetupScreen(repository: SettingsRepository) {
     var bottomPadding by remember(settings.bottomPaddingDp) { mutableFloatStateOf(settings.bottomPaddingDp) }
     var hapticStrength by remember(settings.hapticStrength) { mutableFloatStateOf(settings.hapticStrength) }
     var soundVolume by remember(settings.soundVolume) { mutableFloatStateOf(settings.soundVolume) }
+    // Which screen the activity is showing. The Colours picker is a full screen rather than a card,
+    // so the hue strip, the lightness slider and the live palette all have room to breathe.
+    var showColours by rememberSaveable { mutableStateOf(false) }
 
     var enabled by remember { mutableStateOf(isKeyboardEnabled(context)) }
     var selected by remember { mutableStateOf(isKeyboardSelected(context)) }
@@ -263,6 +269,32 @@ private fun SetupScreen(repository: SettingsRepository) {
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
+    // The Colours screen is the one colour control. It writes the same stored choice the keyboard
+    // resolves its single palette from, so what the preview shows is what the board will draw.
+    if (showColours) {
+        ColoursScreen(
+            settings = settings,
+            onSelectPreset = { id ->
+                scope.launch { repository.update { it.copy(colourPresetId = id) } }
+            },
+            onSeed = { hue, saturation, lightness ->
+                scope.launch {
+                    repository.update {
+                        it.copy(
+                            colourPresetId = Colours.ID_CUSTOM,
+                            colourSeedHue = hue,
+                            colourSeedSaturation = saturation,
+                            colourSeedLightness = lightness,
+                        )
+                    }
+                }
+            },
+            onReset = { scope.launch { repository.update { it.copy(colourPresetId = Colours.ID_JADE) } } },
+            onBack = { showColours = false },
+        )
+        return
+    }
+
     Scaffold(modifier = Modifier.imePadding()) { insets ->
         Column(
             modifier = Modifier
@@ -305,31 +337,28 @@ private fun SetupScreen(repository: SettingsRepository) {
 
             Card(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text("Theme", style = MaterialTheme.typography.titleMedium)
-
-                    LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        item {
-                            ThemeSwatch(
-                                color = MaterialTheme.colorScheme.primary,
-                                label = "Dynamic",
-                                selected = settings.themeId == Themes.ID_DYNAMIC,
-                                onClick = {
-                                    scope.launch { repository.update { it.copy(themeId = Themes.ID_DYNAMIC) } }
-                                },
-                            )
-                        }
-                        items(Themes.presets.size) { index ->
-                            val theme = Themes.presets[index]
-                            ThemeSwatch(
-                                color = Color(theme.background),
-                                label = theme.name,
-                                selected = settings.themeId == theme.id,
-                                onClick = {
-                                    scope.launch { repository.update { it.copy(themeId = theme.id) } }
-                                },
-                            )
-                        }
+                    Text("Colours", style = MaterialTheme.typography.titleMedium)
+                    Text(
+                        "Paint the whole keyboard — the keys, the gesture trail and the popups — from " +
+                            "one palette. Pick a preset or dial in your own seed colour.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    val current = remember(settings.colourChoice) {
+                        KeyboardColours.resolve(settings.colourChoice)
                     }
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        PalettePreview(colours = listOf(
+                            current.palette.key,
+                            current.palette.specialKey,
+                            current.palette.enterKey,
+                            current.palette.label,
+                        ), size = 28.dp)
+                    }
+                    Button(onClick = { showColours = true }) { Text("Choose colours") }
                 }
             }
 
@@ -827,6 +856,178 @@ private fun ThemeSwatch(color: Color, label: String, selected: Boolean, onClick:
                     shape = CircleShape,
                 )
                 .clickable(onClick = onClick),
+        )
+        Text(label, style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(top = 4.dp))
+    }
+}
+
+/** A row of palette swatches; the same colours the keyboard resolves, side by side. */
+@Composable
+private fun PalettePreview(colours: List<Int>, size: Dp) {
+    colours.forEach { argb ->
+        Box(
+            modifier = Modifier
+                .size(size)
+                .background(Color(argb), CircleShape)
+                .border(1.dp, MaterialTheme.colorScheme.outlineVariant, CircleShape),
+        )
+    }
+}
+
+/**
+ * The Colours screen — the keyboard's one colour control.
+ *
+ * Everything here writes the stored choice the IME resolves its single palette from, and the live
+ * preview runs through the same [KeyboardColours], so the swatches are not an illustration of the
+ * palette: they are the palette the board and the chrome will draw with.
+ */
+@Composable
+private fun ColoursScreen(
+    settings: KeyboardSettings,
+    onSelectPreset: (String) -> Unit,
+    onSeed: (Float, Float, Float) -> Unit,
+    onReset: () -> Unit,
+    onBack: () -> Unit,
+) {
+    // Sliders move under the finger and persist once the gesture settles, like the other settings.
+    var hue by remember(settings.colourSeedHue) { mutableFloatStateOf(settings.colourSeedHue) }
+    var saturation by remember(settings.colourSeedSaturation) {
+        mutableFloatStateOf(settings.colourSeedSaturation)
+    }
+    var lightness by remember(settings.colourSeedLightness) {
+        mutableFloatStateOf(settings.colourSeedLightness)
+    }
+    // Touching a seed control shows the custom seed straight away, without writing to the store on
+    // every pixel; the write lands when the gesture finishes.
+    var editingCustom by remember(settings.colourPresetId) {
+        mutableStateOf(settings.colourPresetId == Colours.ID_CUSTOM)
+    }
+
+    val previewChoice = if (editingCustom) {
+        ColourChoice(Colours.ID_CUSTOM, hue, saturation, lightness)
+    } else {
+        settings.colourChoice
+    }
+    val colours = remember(previewChoice) { KeyboardColours.resolve(previewChoice) }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(20.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Button(onClick = onBack) { Text("Back") }
+            Text(
+                "Colours",
+                style = MaterialTheme.typography.headlineMedium,
+                fontWeight = FontWeight.SemiBold,
+            )
+        }
+        Text(
+            "The keys and everything around them — the gesture trail, the popups and the search " +
+                "bar — resolve from one palette, so they always match.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+
+        Card(Modifier.fillMaxWidth()) {
+            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text("Preset", style = MaterialTheme.typography.titleMedium)
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    items(Colours.presets.size) { index ->
+                        val preset = Colours.presets[index]
+                        ThemeSwatch(
+                            color = Color(preset.palette.key),
+                            label = preset.name,
+                            selected = settings.colourPresetId == preset.id,
+                            onClick = { onSelectPreset(preset.id) },
+                        )
+                    }
+                }
+            }
+        }
+
+        Card(Modifier.fillMaxWidth()) {
+            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text("Custom seed", style = MaterialTheme.typography.titleMedium)
+                Text(
+                    "Drag along the hue, then set how saturated and how light the seed is.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                SettingSlider(
+                    label = "Hue",
+                    value = hue,
+                    valueLabel = "${hue.roundToInt()}°",
+                    valueRange = Colours.HUE_MIN..Colours.HUE_MAX,
+                    steps = 11,
+                    onValueChange = {
+                        hue = it
+                        editingCustom = true
+                    },
+                    onValueChangeFinished = { onSeed(hue, saturation, lightness) },
+                )
+                SettingSlider(
+                    label = "Saturation",
+                    value = saturation,
+                    valueLabel = "${(saturation * 100).roundToInt()}%",
+                    valueRange = 0f..1f,
+                    steps = 9,
+                    onValueChange = {
+                        saturation = it
+                        editingCustom = true
+                    },
+                    onValueChangeFinished = { onSeed(hue, saturation, lightness) },
+                )
+                SettingSlider(
+                    label = "Lightness",
+                    value = lightness,
+                    valueLabel = "${(lightness * 100).roundToInt()}%",
+                    valueRange = 0f..1f,
+                    steps = 9,
+                    onValueChange = {
+                        lightness = it
+                        editingCustom = true
+                    },
+                    onValueChangeFinished = { onSeed(hue, saturation, lightness) },
+                )
+                Button(onClick = onReset, modifier = Modifier.padding(top = 8.dp)) {
+                    Text("Reset to jade")
+                }
+            }
+        }
+
+        Card(Modifier.fillMaxWidth()) {
+            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text("Preview", style = MaterialTheme.typography.titleMedium)
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(16.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    PreviewSwatch("Normal key", colours.palette.key)
+                    PreviewSwatch("Special key", colours.palette.specialKey)
+                    PreviewSwatch("Enter", colours.palette.enterKey)
+                    PreviewSwatch("Label", colours.palette.label)
+                }
+            }
+        }
+    }
+}
+
+/** One labelled swatch in the Colours preview. */
+@Composable
+private fun PreviewSwatch(label: String, argb: Int) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Box(
+            modifier = Modifier
+                .size(44.dp)
+                .background(Color(argb), CircleShape)
+                .border(1.dp, MaterialTheme.colorScheme.outlineVariant, CircleShape),
         )
         Text(label, style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(top = 4.dp))
     }

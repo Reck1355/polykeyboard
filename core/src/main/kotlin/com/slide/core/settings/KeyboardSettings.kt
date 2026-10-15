@@ -17,6 +17,8 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
 import androidx.datastore.preferences.preferencesDataStore
 import com.slide.core.emoji.EmojiData
+import com.slide.core.theme.ColourChoice
+import com.slide.core.theme.Colours
 import com.slide.core.theme.Themes
 import java.io.File
 import java.io.IOException
@@ -38,6 +40,21 @@ import kotlinx.coroutines.sync.withLock
 /** User-facing keyboard preferences. */
 data class KeyboardSettings(
     val themeId: String = Themes.ID_DYNAMIC,
+    /**
+     * The keyboard's colour choice: [Colours.ID_JADE] by default, a built-in preset id, or
+     * [Colours.ID_CUSTOM] for the seed below.
+     *
+     * This is the single colour control. The hex board and every chrome surface resolve their
+     * colours from it (see [colourChoice]), so a fresh install shows jade and nothing else has to
+     * agree on a colour separately.
+     */
+    val colourPresetId: String = Colours.ID_JADE,
+    /** Custom seed hue in 0..360, read only while [colourPresetId] is [Colours.ID_CUSTOM]. */
+    val colourSeedHue: Float = Colours.DEFAULT_SEED_HUE,
+    /** Custom seed saturation in 0..1. */
+    val colourSeedSaturation: Float = Colours.DEFAULT_SEED_SATURATION,
+    /** Custom seed lightness in 0..1. */
+    val colourSeedLightness: Float = Colours.DEFAULT_SEED_LIGHTNESS,
     /**
      * Whether an *unresolvable* [themeId] falls back to Dark when the system is dark, rather
      * than always to Light.
@@ -121,6 +138,15 @@ data class KeyboardSettings(
     /** Autocorrection can only operate while the suggestion pipeline and strip are enabled. */
     val isAutocorrectionActive: Boolean
         get() = suggestionsEnabled && autocorrectEnabled
+
+    /** The colour choice these fields make up, in the form the palette resolver consumes. */
+    val colourChoice: ColourChoice
+        get() = ColourChoice(
+            presetId = colourPresetId,
+            seedHue = colourSeedHue,
+            seedSaturation = colourSeedSaturation,
+            seedLightness = colourSeedLightness,
+        )
 
     companion object {
         /**
@@ -232,8 +258,9 @@ private val LEGACY_SETTINGS_MIGRATION_COMPLETE =
 
 /** Preferences keys are name-based, so validate the erased value before copying the legacy key. */
 internal fun isBackupEligibleSetting(name: String, value: Any): Boolean = when (name) {
-    "theme_id", "voice_model" -> value is String
+    "theme_id", "voice_model", "colour_preset_id" -> value is String
     "key_height_scale", "bottom_padding_dp", "haptic_strength", "sound_volume" -> value is Float
+    "colour_seed_hue", "colour_seed_saturation", "colour_seed_lightness" -> value is Float
     "learned_data_clear_epoch" -> value is Long
     "emoji_skin_tone" -> value is Int
     "follow_system_dark",
@@ -543,6 +570,10 @@ class SettingsRepository(private val context: Context) {
  */
 private object Keys {
     val THEME_ID = stringPreferencesKey("theme_id")
+    val COLOUR_PRESET_ID = stringPreferencesKey("colour_preset_id")
+    val COLOUR_SEED_HUE = floatPreferencesKey("colour_seed_hue")
+    val COLOUR_SEED_SATURATION = floatPreferencesKey("colour_seed_saturation")
+    val COLOUR_SEED_LIGHTNESS = floatPreferencesKey("colour_seed_lightness")
     val FOLLOW_SYSTEM_DARK = booleanPreferencesKey("follow_system_dark")
     val KEY_BORDERS = booleanPreferencesKey("key_borders")
     val KEY_PREVIEW = booleanPreferencesKey("key_preview")
@@ -570,6 +601,10 @@ private object Keys {
 
 internal fun MutablePreferences.writeKeyboardSettings(updated: KeyboardSettings) {
     this[Keys.THEME_ID] = updated.themeId
+    this[Keys.COLOUR_PRESET_ID] = updated.colourPresetId
+    this[Keys.COLOUR_SEED_HUE] = updated.colourSeedHue
+    this[Keys.COLOUR_SEED_SATURATION] = updated.colourSeedSaturation
+    this[Keys.COLOUR_SEED_LIGHTNESS] = updated.colourSeedLightness
     this[Keys.FOLLOW_SYSTEM_DARK] = updated.followSystemDarkMode
     this[Keys.KEY_BORDERS] = updated.showKeyBorders
     this[Keys.KEY_PREVIEW] = updated.showKeyPreview
@@ -598,6 +633,10 @@ internal fun Preferences.toKeyboardSettings(): KeyboardSettings {
     val defaults = KeyboardSettings()
     return KeyboardSettings(
         themeId = this[Keys.THEME_ID] ?: defaults.themeId,
+        colourPresetId = this[Keys.COLOUR_PRESET_ID] ?: defaults.colourPresetId,
+        colourSeedHue = boundedFloat(Keys.COLOUR_SEED_HUE, defaults.colourSeedHue, Colours.HUE_MIN..Colours.HUE_MAX),
+        colourSeedSaturation = boundedFloat(Keys.COLOUR_SEED_SATURATION, defaults.colourSeedSaturation, 0f..1f),
+        colourSeedLightness = boundedFloat(Keys.COLOUR_SEED_LIGHTNESS, defaults.colourSeedLightness, 0f..1f),
         followSystemDarkMode = this[Keys.FOLLOW_SYSTEM_DARK] ?: defaults.followSystemDarkMode,
         showKeyBorders = this[Keys.KEY_BORDERS] ?: defaults.showKeyBorders,
         showKeyPreview = this[Keys.KEY_PREVIEW] ?: defaults.showKeyPreview,

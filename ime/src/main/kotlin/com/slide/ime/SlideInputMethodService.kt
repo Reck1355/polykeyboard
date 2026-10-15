@@ -37,8 +37,7 @@ import com.slide.core.layout.KeyboardLayout
 import com.slide.core.layout.Layouts
 import com.slide.core.settings.KeyboardSettings
 import com.slide.core.settings.SettingsRepository
-import com.slide.core.theme.KeyboardTheme
-import com.slide.core.theme.Themes
+import com.slide.core.theme.KeyboardColours
 import com.slide.engine.gesture.GestureDecoder
 import com.slide.engine.gesture.GestureAdaptation
 import com.slide.engine.gesture.GestureCandidate
@@ -525,7 +524,7 @@ class SlideInputMethodService :
                 }
 
                 refreshSuggestionEmptyMessage()
-                applyTheme(resolveTheme())
+                applyTheme(resolveColours())
             }
             .launchIn(scope)
 
@@ -652,7 +651,8 @@ class SlideInputMethodService :
     )
 
     override fun onCreateInputView(): View {
-        val theme = resolveTheme()
+        val colours = resolveColours()
+        val theme = colours.chrome
 
         val strip = SuggestionStripView(this).apply {
             listener = this@SlideInputMethodService
@@ -663,6 +663,8 @@ class SlideInputMethodService :
             listener = this@SlideInputMethodService
             settings = this@SlideInputMethodService.settings
             keyboardTheme = theme
+            // The board's own six slots, from the same resolved set the chrome came out of.
+            hexPalette = colours.palette
             keyboardLayout = Layouts.QwertyEn
             enterAction = EnterAction.RETURN
             gestureTypingAvailable = false
@@ -735,7 +737,7 @@ class SlideInputMethodService :
             addView(strip, MATCH_PARENT, WRAP_CONTENT)
             addView(keys, MATCH_PARENT, WRAP_CONTENT)
             inputRoot = this
-            applyTheme(theme)
+            applyTheme(colours)
         }
     }
 
@@ -816,7 +818,7 @@ class SlideInputMethodService :
         }
         suggestionStrip?.voiceEnabled = voiceAvailableForEditor()
         updateGestureAvailability()
-        applyTheme(resolveTheme())
+        applyTheme(resolveColours())
         // Candidates from the previous field would be nonsense here, and tapping one would try to
         // rewrite text that belongs to a different editor.
         clearSuggestions()
@@ -828,10 +830,20 @@ class SlideInputMethodService :
     override fun onConfigurationChanged(newConfig: Configuration) {
         super.onConfigurationChanged(newConfig)
         gestureKeyMapCache = null
-        applyTheme(resolveTheme())
+        applyTheme(resolveColours())
     }
 
-    private fun applyTheme(theme: KeyboardTheme) {
+    /**
+     * Paints every surface from one resolved colour set.
+     *
+     * The board takes the six-slot [KeyboardColours.palette]; the chrome takes
+     * [KeyboardColours.chrome], which is derived from that same palette. So the trail, the popups
+     * and the search header are always a colour the board already is — a change can never repaint
+     * half the keyboard.
+     */
+    private fun applyTheme(colours: KeyboardColours) {
+        val theme = colours.chrome
+        keyboardView?.hexPalette = colours.palette
         keyboardView?.keyboardTheme = theme
         suggestionStrip?.keyboardTheme = theme
         voiceOverlay?.keyboardTheme = theme
@@ -4516,16 +4528,14 @@ class SlideInputMethodService :
         }
     }
 
-    private fun resolveTheme(): KeyboardTheme {
-        val nightMask = resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK
-        val inDarkMode = nightMask == Configuration.UI_MODE_NIGHT_YES
-        return Themes.resolve(
-            context = this,
-            themeId = settings.themeId,
-            systemInDarkMode = inDarkMode,
-            followSystem = settings.followSystemDarkMode,
-        )
-    }
+    /**
+     * The keyboard's one colour source, resolved from the stored choice.
+     *
+     * The board and the chrome both come from this, which is what makes a colour change atomic. It
+     * no longer consults the system dark mode: the user's choice is explicit, and the chrome's
+     * light/dark reads off the palette itself (see [HexPalette.chromeTheme]).
+     */
+    private fun resolveColours(): KeyboardColours = KeyboardColours.resolve(settings.colourChoice)
 
     // endregion
 
