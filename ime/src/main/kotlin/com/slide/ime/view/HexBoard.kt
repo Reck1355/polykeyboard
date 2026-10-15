@@ -67,6 +67,44 @@ object HexBoard {
     fun boardHeight(viewWidth: Float): Float = blockHeight(cellWidth(viewWidth))
 
     /**
+     * The most of the display's height the board may take, as a fraction of that height.
+     *
+     * This is the approved landscape render. On a 2400 x 1080 screen the board is a 594 px block —
+     * 55% of the display height — which puts the cell at the approved 158.28 px and leaves the
+     * leftover width empty at each side. The board's natural height there is 3.7528 x 240 px = 900
+     * px, because with no cap the width alone decides a 240 px cell; drawn at that size the board
+     * fills the width with no side margins, which is not the single uniformly scaled board that was
+     * approved. Portrait never approaches the cap — its natural block is 405 px of a 2400 px screen
+     * — so the cap is a no-op there.
+     */
+    const val LANDSCAPE_HEIGHT_FRACTION = 0.55f
+
+    /**
+     * The tallest the board may be drawn on a display [displayHeight] px tall.
+     *
+     * A non-positive or non-finite height is treated as no cap at all, so a display the view cannot
+     * yet measure leaves the board at its natural size rather than collapsing it to nothing.
+     */
+    fun heightCap(displayHeight: Float): Float =
+        if (displayHeight <= 0f || !displayHeight.isFinite()) {
+            Float.POSITIVE_INFINITY
+        } else {
+            displayHeight * LANDSCAPE_HEIGHT_FRACTION
+        }
+
+    /**
+     * The drawn height the board is given in a viewport [viewWidth] wide on a display [displayHeight]
+     * px tall: its natural block height, held to [LANDSCAPE_HEIGHT_FRACTION] of the display.
+     *
+     * Only the block is capped; the view's own padding sits outside it, so the height the board is
+     * then placed into is the cap itself — 594 px of the approved 1080 px landscape screen. The cell
+     * follows from that height in [place], so the approved 158.28 px cell is derived rather than
+     * stated, and in portrait the natural height comes back unchanged because it is under the cap.
+     */
+    fun cappedBoardHeight(viewWidth: Float, displayHeight: Float): Float =
+        min(boardHeight(viewWidth), heightCap(displayHeight))
+
+    /**
      * The block's drawn height for a cell one unit wide — 3.7528, what "3.75 cells" rounds to.
      *
      * Written from the same two numbers the cap is built out of, [CELL_HEIGHT_RATIO] and

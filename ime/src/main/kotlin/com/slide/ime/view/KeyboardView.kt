@@ -1,6 +1,7 @@
 package com.slide.ime.view
 
 import android.content.Context
+import android.content.res.Configuration
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
@@ -471,17 +472,34 @@ class KeyboardView @JvmOverloads constructor(
      */
     private fun bottomInset(): Float = dp(settings.bottomPaddingDp)
 
+    /**
+     * The current display's height in pixels — the screen the keyboard is drawn on.
+     *
+     * Read fresh on every measure rather than cached, so a rotation re-applies the height cap for
+     * the new orientation: the display height changes with the configuration, and re-reading it here
+     * is what makes the board come out at the new cell size instead of a stale one. It is the
+     * display's height and not the window's, because the cap is the approved share of the screen the
+     * board sits on, and the IME window can be shorter than that for reasons that are none of the
+     * board's business.
+     */
+    private fun displayHeight(): Float = resources.displayMetrics.heightPixels.toFloat()
+
     override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
         val width = MeasureSpec.getSize(widthMeasureSpec)
         val header = if (searchMode) searchHeaderHeight() else 0f
         val height = if (hexBoard) {
             // The board's natural height is a constant 3.7528 cell widths: the number row is off,
-            // the key-height setting does not apply to a shape whose proportion is fixed. But the
-            // frame may be shorter than that - a landscape window, a keyboard sitting under a
-            // taller app - and then it is the frame that decides, so the natural request is capped
-            // by whatever the parent allows. The board then scales uniformly into what is left,
-            // which is the landscape case: height binds, and the leftover side width stays empty.
-            val natural = topPadding + header + HexBoard.boardHeight(width.toFloat()) + bottomInset()
+            // the key-height setting does not apply to a shape whose proportion is fixed. Two
+            // things bound it. The approved board may take no more of the display than
+            // HexBoard.LANDSCAPE_HEIGHT_FRACTION of its height; without that cap a wide landscape
+            // screen lets the width alone decide a 240 px cell and a 900 px block that fills the
+            // width with no side margins, which is not the board that was approved. The cap turns
+            // that into the approved single scaled board - 594 px of the 1080 px screen, 158.28 px
+            // cells, the leftover width empty. And the frame may still be shorter than the capped
+            // board - a keyboard sitting under a taller app - and then it is the frame that decides.
+            // In either case the board scales uniformly into what is left.
+            val natural = topPadding + header +
+                HexBoard.cappedBoardHeight(width.toFloat(), displayHeight()) + bottomInset()
             if (MeasureSpec.getMode(heightMeasureSpec) == MeasureSpec.UNSPECIFIED) {
                 natural
             } else {
@@ -500,6 +518,23 @@ class KeyboardView @JvmOverloads constructor(
         super.onSizeChanged(w, h, oldw, oldh)
         recomputeGeometry(w, h)
         accessibilityHelper.invalidateRoot()
+    }
+
+    /**
+     * Re-request layout when the configuration changes, so a rotation re-applies the height cap.
+     *
+     * The cap is a share of the display height and [onMeasure] reads that height fresh each pass, so
+     * the new size is picked up on the next measure. A rotation can, however, leave this view's
+     * measured width and height unchanged for a pass — the input view is re-measured by the window,
+     * not by this view — and then the framework keeps the stale cells. Requesting layout here makes
+     * the new display height the one the board is sized against, so rotating with the keyboard up
+     * repaints it at the new cell size rather than leaving a board sized for the old screen. This is
+     * a nudge to the existing measure pass, not a second sizing path.
+     */
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+        requestLayout()
+        invalidate()
     }
 
     private fun recomputeGeometry(width: Int, height: Int) {
