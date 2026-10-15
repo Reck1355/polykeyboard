@@ -1,5 +1,6 @@
 package com.slide.ime.view
 
+import com.slide.core.layout.Key
 import com.slide.core.layout.KeyboardLayout
 import kotlin.math.min
 import kotlin.math.roundToInt
@@ -23,15 +24,24 @@ import kotlin.math.sqrt
  * The ratio is per orientation because the two axes are spent in opposite ways. Portrait is
  * width-bound: QWERTY needs ten columns, so on a 1080 px screen the cell width is fixed and height
  * is the only free axis — the taller hexagon ([HexKeyMetrics.PORTRAIT_HEIGHT_FRACTION] = 1.5) spends
- * it. Landscape is height-bound: the display height share fixes the block, so width is free — there
- * the *regular* hexagon is what fits and the leftover width is left as equal side bands. The letter
- * grid — 10 / 9 / 9 / 7 keys, rows staggered 0.0 / 0.5 / 0.0 / 0.5, one three-cell space — is
- * identical in both; only the cell's aspect moves.
+ * it, and the ten columns fill the width. Landscape is height-bound: the display height share fixes
+ * the block, so width is free — there the *flat* hexagon ([LANDSCAPE_HEIGHT_RATIO] = 0.95) is what
+ * it is drawn at, and the free width becomes the channel down the middle of a two-handed board
+ * ([SplitHalves]).
  *
- * One board for both orientations. Portrait is a special case of the same rule as landscape: the
- * cell is the largest that fits, and whichever of width and height binds decides the shape of the
- * empty space around it — none in portrait, the two side bands in landscape. Which of the two is
- * which is decided once, in [sizing].
+ * The letter grid is one board in portrait and two halves in landscape. Portrait keeps the frozen
+ * grid — 10 / 9 / 9 / 7 keys, rows staggered 0.0 / 0.5 / 0.0 / 0.5, one three-cell space — because
+ * it is untouched. Landscape splits that same grid down the middle: a left half anchored to the
+ * left edge and a right half anchored to the right, each row keeping its phase but measured from its
+ * half's own outer edge, and every key one single-cell hexagon — the space included, which is one
+ * cell per side instead of a fused trio. Neither half has a deformed key, and the space between them
+ * is empty: a tap there resolves no key.
+ *
+ * One seam for both. Which shape the board takes is decided once, in [sizing]: [Sizing.split] is
+ * true for landscape and false for portrait, and everything downstream reads it rather than testing
+ * the orientation again. The cell is the largest that fits, and whichever of width and height binds
+ * decides the rest — none of the width is given away in portrait, and in landscape the leftover
+ * width is the channel.
  */
 object HexBoard {
 
@@ -76,9 +86,9 @@ object HexBoard {
      *
      * Written from the same two numbers the cap is built out of, [CELL_HEIGHT_RATIO] and
      * [HexKeyMetrics.HEIGHT_FRACTION], so "the pitch is sqrt(3)/2 of a cell" and "the cap is 4/3 of
-     * the pitch" cannot drift apart: they are two readings of one regular hexagon. Landscape keeps
-     * this because there the height is already spent — the caps stay regular and the width is what
-     * is given away.
+     * the pitch" cannot drift apart: they are two readings of one regular hexagon. Neither
+     * orientation draws at this ratio any more — portrait is the taller 1.5 and landscape the
+     * flatter 0.95 — but it stays as the reference hexagon both are read against.
      */
     val REGULAR_HEIGHT_RATIO: Float = CELL_HEIGHT_RATIO * HexKeyMetrics.HEIGHT_FRACTION
 
@@ -93,46 +103,177 @@ object HexBoard {
      * 1080 px landscape screen there was no room left to see what was being typed — "because
      * landscape is so big there also is no space on the screen to actually see the words I'm
      * typing". 0.45 gives the block 486 px and leaves 55% of the height, 594 px, to the app above
-     * it. The cell only follows: 486 / 3.7528 cells is a 129.5 px cell, ten of which are a
-     * 1295 px board with 552.5 px bands either side.
+     * it. The cell only follows: 486 / 3.0875 cells is a 157.4 px cell, so each half of the split
+     * reaches five of those, 787 px, from its own edge, and the channel they leave down the middle is
+     * 747 px.
      */
     const val LANDSCAPE_HEIGHT_FRACTION = 0.45f
+
+    /**
+     * Landscape's hexagon ratio — cap height / cell width — 0.95: the flat hexagon.
+     *
+     * He picked it from the flat / regular / tall comparison for the split board: with the height
+     * already spent by [LANDSCAPE_HEIGHT_FRACTION] and each half only five columns wide, a cap almost
+     * exactly as wide as it is tall reads as a key rather than a tile. Portrait is untouched — it
+     * keeps the tall [HexKeyMetrics.PORTRAIT_HEIGHT_FRACTION] = 1.5.
+     */
+    const val LANDSCAPE_HEIGHT_RATIO = 0.95f
+
+    /** Columns in one half of the split board — QWERTY's ten divided two ways. */
+    const val SPLIT_COLUMNS_PER_HALF = COLUMNS / 2
+
+    /**
+     * The split board's width in cells — its two halves' spans, 5.5 + 5.0 for QWERTY: the ten columns
+     * plus the half-cell step an offset row keeps from its half's own edge.
+     *
+     * The fit rule is asked before any layout is in hand ([cellWidthFor], [heightBinds]), so it cannot
+     * read the halves' spans for itself; this is what it uses instead, and it is *not* free to drift:
+     * the halves come from the layout's own row gaps, and the tests assert this equals their span.
+     */
+    const val SPLIT_WIDTH_IN_CELLS = SPLIT_COLUMNS_PER_HALF * 2f + HONEYCOMB_STEP_IN_CELLS
 
     /** The board's two sizings. Which axis is spent decides which hexagon ratio it gets. */
     enum class Orientation { PORTRAIT, LANDSCAPE }
 
     /**
      * One orientation's board geometry: the share of the display height the board may take
-     * ([heightFraction]), and the hexagon ratio it is drawn at ([heightRatio], cap height over cell
-     * width).
+     * ([heightFraction]), the hexagon ratio it is drawn at ([heightRatio], cap height over cell
+     * width), and whether the board is the two-handed split ([split]).
+     *
+     * The split is a field of the sizing rather than a separate object because it is the same kind of
+     * fact as the ratio — a property of the orientation's geometry — and carrying it here is what
+     * keeps "is this board split?" a question with exactly one answer, read from the same place the
+     * cell is.
      */
-    data class Sizing(val heightFraction: Float, val heightRatio: Float)
+    data class Sizing(val heightFraction: Float, val heightRatio: Float, val split: Boolean = false)
 
     /**
      * The board's geometry for [orientation] — the only place either orientation is described.
      *
-     * Landscape is expected to change shape again: the request on the table is a board split down
-     * the middle, one half for the left hand and one for the right. When it does, this `when` is the
-     * seam — the sizing path reads [Sizing] and never spells landscape out itself — so the split
-     * lands here instead of being smeared through the view and the drawing.
+     * Landscape is the two-handed split: [Sizing.split] is true, so [place] lays the same letters out
+     * as a left half anchored to the left edge and a right half anchored to the right, one
+     * single-cell hexagon per key, with the empty channel between them. The split landed at this
+     * seam, the one the earlier geometry left for it: the view and the drawing read [Sizing] and
+     * never spell landscape out, so neither of them had to change.
      *
      * Portrait's share is 1.0, i.e. no cap: it is width-bound, and its natural block (526.5 px of a
      * 2400 px screen) is nowhere near a sane share. Capping it would be the one thing that could
-     * *shrink* the portrait keys, which is the opposite of what portrait was asked for.
+     * *shrink* the portrait keys, which is the opposite of what portrait was asked for. Its split is
+     * false, and that is asserted, so the landscape split cannot leak into it.
      */
     fun sizing(orientation: Orientation): Sizing = when (orientation) {
         Orientation.PORTRAIT -> Sizing(
             heightFraction = 1f,
             heightRatio = HexKeyMetrics.PORTRAIT_HEIGHT_FRACTION,
+            split = false,
         )
         Orientation.LANDSCAPE -> Sizing(
             heightFraction = LANDSCAPE_HEIGHT_FRACTION,
-            heightRatio = REGULAR_HEIGHT_RATIO,
+            heightRatio = LANDSCAPE_HEIGHT_RATIO,
+            split = true,
         )
     }
 
     /** The hexagon ratio (cap height / cell width) for [orientation]. */
     fun heightRatio(orientation: Orientation): Float = sizing(orientation).heightRatio
+
+    // --- The two-handed split (landscape only) -------------------------------------------------
+
+    /**
+     * One row of a [SplitHalf]: its keys, and how far the row is inset from that half's own outer
+     * edge ([outerGap], in cells).
+     *
+     * The inset is read from the row's own layout gap — the leading gap on the left half, the
+     * trailing gap on the right — so "the phase is preserved, measured from the half's own edge" is
+     * the layout's own statement rather than a number restated here.
+     */
+    class SplitRow(val keys: List<Key>, val outerGap: Float) {
+        /** How far this row reaches across the screen from its half's outer edge, in cells. */
+        val spanInCells: Float get() = outerGap + keys.sumOf { it.widthWeight.toDouble() }.toFloat()
+    }
+
+    /**
+     * One hand's half of the split board: four rows, anchored to that half's own screen edge.
+     *
+     * [spanInCells] is the half's reach across the screen — its widest row — and that row's inner
+     * edge is what the channel opens against.
+     */
+    class SplitHalf(val rows: List<SplitRow>) {
+        val spanInCells: Float get() = rows.maxOfOrNull { it.spanInCells } ?: 0f
+    }
+
+    /**
+     * The board divided two ways: [left], anchored to the left edge, and [right], anchored to the
+     * right.
+     *
+     * [spanInCells] is what the two halves need of the width between them — the sum of their reaches
+     * — so the channel left over is `viewport - spanInCells x cell`. It is derived from the keys
+     * rather than written down: change the cap, a half, or a row's phase and the channel moves with
+     * it.
+     */
+    class SplitHalves(val left: SplitHalf, val right: SplitHalf) {
+        val spanInCells: Float get() = left.spanInCells + right.spanInCells
+    }
+
+    /**
+     * The two-handed split of [layout] — the same letters, divided down the middle.
+     *
+     * Each row is cut at its own *cell* centre rather than by key count, so a row whose keys are not
+     * all one cell wide is cut where its cells are: the left half takes every key that starts before
+     * that cell, and a key wider than one cell that straddles it — the three-cell space — gives one
+     * single cell to each half instead of a fused trio. A single-cell key that straddles the cut
+     * stays whole, on the side its left edge is: that is what keeps the odd rows (nine keys) as 5 + 4
+     * rather than slicing a letter in two.
+     *
+     * The left half reads each row's inset from the row's leading gap and the right half from its
+     * trailing gap — that is what "mirrored" means here: the same phase, measured from opposite
+     * edges.
+     */
+    fun splitHalves(layout: KeyboardLayout): SplitHalves {
+        val leftRows = ArrayList<SplitRow>(layout.rows.size)
+        val rightRows = ArrayList<SplitRow>(layout.rows.size)
+        layout.rows.forEach { row ->
+            val cut = row.keys.sumOf { it.widthWeight.toDouble() }.toFloat() * 0.5f
+            val leftKeys = ArrayList<Key>()
+            val rightKeys = ArrayList<Key>()
+            var x = 0f
+            row.keys.forEach { key ->
+                val right = x + key.widthWeight
+                when {
+                    x >= cut -> rightKeys += key
+                    right <= cut -> leftKeys += key
+                    // A key wider than one cell straddling the cut: one single cell to each half.
+                    spanCells(key.widthWeight) > 1 -> {
+                        leftKeys += key.copy(widthWeight = 1f)
+                        rightKeys += key.copy(widthWeight = 1f)
+                    }
+                    // A single-cell key that straddles the cut stays whole, on its left edge's side.
+                    else -> leftKeys += key
+                }
+                x = right
+            }
+            leftRows += SplitRow(leftKeys, row.leadingGap)
+            rightRows += SplitRow(rightKeys, row.trailingGap)
+        }
+        return SplitHalves(SplitHalf(leftRows), SplitHalf(rightRows))
+    }
+
+    /**
+     * The empty corridor between the two halves of a split board, in view pixels.
+     *
+     * [start] and [end] are the inner edges of the two halves' widest-reaching rows — the tightest
+     * pair of keys across the board — so the corridor is the largest empty span any row has, and a
+     * tap anywhere in it is aimed at neither hand. It is empty by construction and by test: no key
+     * crosses it, and its centre resolves no key.
+     */
+    class Channel(val start: Float, val end: Float) {
+        /** The channel's width — the board's free width, and the minimum gap between the halves. */
+        val width: Float get() = end - start
+
+        val center: Float get() = (start + end) * 0.5f
+
+        fun contains(x: Float): Boolean = x >= start && x <= end
+    }
 
     fun cellWidth(viewWidth: Float): Float = viewWidth / COLUMNS
 
@@ -202,17 +343,31 @@ object HexBoard {
      * the block those columns want, the height simply takes over. The choice is a `min` over the
      * two, which is why the board can only ever shrink — and why the leftover side width in
      * landscape is left empty instead of being filled with keys nobody asked for.
+     *
+     * The width the columns are measured against is [widthInCells] — the split is half a cell wider
+     * than the ten columns, because its outer offset rows keep their half-cell phase from their own
+     * edge, so the halves cannot overlap on a narrow screen.
      */
     fun cellWidthFor(viewportWidth: Float, availableHeight: Float, sizing: Sizing): Float {
         if (viewportWidth <= 0f || !viewportWidth.isFinite()) return 0f
-        val byWidth = viewportWidth / COLUMNS
+        val byWidth = viewportWidth / widthInCells(sizing)
         if (availableHeight <= 0f || !availableHeight.isFinite()) return byWidth
         return min(byWidth, availableHeight / blockHeightInCells(sizing))
     }
 
+    /**
+     * The board's width in cells at [sizing] — what the viewport's width has to hold.
+     *
+     * One board is [COLUMNS] columns wide; the split is [SPLIT_WIDTH_IN_CELLS], and the channel is
+     * the width left over rather than a reserved band, so nothing but the halves' own spans sets the
+     * cell's width bound.
+     */
+    fun widthInCells(sizing: Sizing): Float =
+        if (sizing.split) SPLIT_WIDTH_IN_CELLS else COLUMNS.toFloat()
+
     /** True when the frame is too short for the width-derived cell, so the height is what binds. */
     fun heightBinds(viewportWidth: Float, availableHeight: Float, sizing: Sizing): Boolean =
-        cellWidthFor(viewportWidth, availableHeight, sizing) < viewportWidth / COLUMNS
+        cellWidthFor(viewportWidth, availableHeight, sizing) < viewportWidth / widthInCells(sizing)
 
     /** The board as it was placed: its metrics, and the keys themselves. */
     class HexPlacement(
@@ -226,21 +381,28 @@ object HexBoard {
         /** The geometry the cell was sized from. */
         val sizing: Sizing,
         val keys: List<PlacedKey>,
+        /** The empty channel between the halves of a split board; null on the single board. */
+        val channel: Channel? = null,
     ) {
         /** True when the board fills the viewport's width and has no side margins. */
         val spansViewport: Boolean get() = leftInset <= 0.001f
 
         /** The hexagon ratio (cap height / cell width) this placement was drawn at. */
         val heightRatio: Float get() = sizing.heightRatio
+
+        /** True when this is the two-handed split — the halves anchored to opposite edges. */
+        val split: Boolean get() = sizing.split
     }
 
     /**
-     * Places the board into a viewport, centring it horizontally and scaling it to fit.
+     * Places the board into a viewport: the single board centred horizontally, or — when
+     * [Sizing.split] — the two-handed split, each half anchored to its own edge.
      *
      * The scale is applied to the cell and the row height follows from the same ratio, so the caps
      * keep their hexagon — a stretched honeycomb is the one outcome the fit rule exists to prevent.
-     * The board is centred rather than left-aligned because the empty space either side of a
-     * scaled-down board is a margin, and a margin that only appears on the right looks like a bug.
+     * The single board is centred rather than left-aligned because the empty space either side of a
+     * scaled-down board is a margin, and a margin that only appears on the right looks like a bug; on
+     * the split the empty space is the channel, between the halves and by design.
      */
     fun place(
         layout: KeyboardLayout,
@@ -249,6 +411,7 @@ object HexBoard {
         sizing: Sizing,
         topOffset: Float = 0f,
     ): HexPlacement {
+        if (sizing.split) return placeSplit(layout, viewportWidth, availableHeight, sizing, topOffset)
         val cellWidth = cellWidthFor(viewportWidth, availableHeight, sizing)
         val boardWidth = cellWidth * COLUMNS
         val leftInset = ((viewportWidth - boardWidth) * 0.5f).coerceAtLeast(0f)
@@ -272,6 +435,102 @@ object HexBoard {
             sizing = sizing,
             keys = placed,
         )
+    }
+
+    /**
+     * Places the two-handed split: the halves of [splitHalves] laid out at the cell the available
+     * height yields, each anchored to its own screen edge, with the channel left empty between them.
+     *
+     * The width is not spent on the cell here — the halves are pinned to the edges and the free width
+     * becomes the channel — so the only thing the width puts on the cell is that the halves must
+     * still not overlap ([splitCellWidth]). At 2400 x 1080 that bound is slack: the height's 486 px
+     * block decides a 157.4 px cell, each half reaches 787 px from its edge, and the 747 px channel
+     * is whatever is left. The keys span the full viewport (the halves' outer rows sit on the edges),
+     * so there is no side margin, and the channel is the whole of the space between them.
+     */
+    private fun placeSplit(
+        layout: KeyboardLayout,
+        viewportWidth: Float,
+        availableHeight: Float,
+        sizing: Sizing,
+        topOffset: Float,
+    ): HexPlacement {
+        val halves = splitHalves(layout)
+        val cellWidth = splitCellWidth(viewportWidth, availableHeight, sizing, halves.spanInCells)
+        val cellHeight = cellHeight(cellWidth, sizing)
+        val top = topOffset + topOverhang(cellHeight)
+        val keys = ArrayList<PlacedKey>(
+            halves.left.rows.sumOf { it.keys.size } + halves.right.rows.sumOf { it.keys.size },
+        )
+        placeHalf(halves.left, keys, fromRight = false, cellWidth, cellHeight, top, viewportWidth)
+        placeHalf(halves.right, keys, fromRight = true, cellWidth, cellHeight, top, viewportWidth)
+        val naturalCell = if (viewportWidth > 0f) viewportWidth / COLUMNS else cellWidth
+        return HexPlacement(
+            cellWidth = cellWidth,
+            boardWidth = viewportWidth,
+            boardHeight = blockHeight(cellWidth, sizing),
+            leftInset = 0f,
+            scale = if (naturalCell > 0f) cellWidth / naturalCell else 1f,
+            sizing = sizing,
+            keys = keys,
+            // Each half's reach is where its inner edge is, so the channel opens exactly where the
+            // tightest pair of keys ends — a future cap or phase change moves both together.
+            channel = Channel(
+                start = halves.left.spanInCells * cellWidth,
+                end = viewportWidth - halves.right.spanInCells * cellWidth,
+            ),
+        )
+    }
+
+    /**
+     * Places one half's rows into [out], anchored to that half's own outer edge.
+     *
+     * A left half grows right from x = 0; a right half grows left from x = [viewportWidth], which is
+     * the mirror. Either way each row starts [SplitRow.outerGap] cells in from that edge, so the phase
+     * a row had on the single board is the phase it keeps here, only read from the other side.
+     */
+    private fun placeHalf(
+        half: SplitHalf,
+        out: MutableList<PlacedKey>,
+        fromRight: Boolean,
+        cellWidth: Float,
+        cellHeight: Float,
+        top: Float,
+        viewportWidth: Float,
+    ) {
+        var y = top
+        half.rows.forEachIndexed { rowIndex, row ->
+            val rowWidth = row.keys.sumOf { it.widthWeight.toDouble() }.toFloat() * cellWidth
+            var x = if (fromRight) {
+                viewportWidth - row.outerGap * cellWidth - rowWidth
+            } else {
+                row.outerGap * cellWidth
+            }
+            row.keys.forEach { key ->
+                val width = key.widthWeight * cellWidth
+                out += PlacedKey(key, x, y, x + width, y + cellHeight, rowIndex)
+                x += width
+            }
+            y += cellHeight
+        }
+    }
+
+    /**
+     * The largest cell the split board can use: the height's block ([availableHeight] over the
+     * block-in-cells), held so the two halves still fit across [viewportWidth] without their inner
+     * rows touching. The halves are edge-anchored, so the width is spent on the channel rather than
+     * on the cell; this is the only bound the width puts on it.
+     */
+    private fun splitCellWidth(
+        viewportWidth: Float,
+        availableHeight: Float,
+        sizing: Sizing,
+        spanInCells: Float,
+    ): Float {
+        if (viewportWidth <= 0f || !viewportWidth.isFinite()) return 0f
+        val byWidth = if (spanInCells > 0f) viewportWidth / spanInCells else viewportWidth / COLUMNS
+        if (availableHeight <= 0f || !availableHeight.isFinite()) return byWidth
+        return min(byWidth, availableHeight / blockHeightInCells(sizing))
     }
 
     /**

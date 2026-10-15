@@ -488,10 +488,9 @@ class KeyboardView @JvmOverloads constructor(
      * The board's sizing for the display's current orientation.
      *
      * The hexagon ratio is per orientation because the two axes are spent in opposite ways — see
-     * [HexKeyMetrics.PORTRAIT_HEIGHT_FRACTION] and [HexBoard.REGULAR_HEIGHT_RATIO]. Portrait is the
-     * default: only a landscape display gets the regular hexagon and the side bands, and a
-     * configuration the runtime has not settled yet behaves like portrait rather than picking a
-     * ratio at random.
+     * [HexKeyMetrics.PORTRAIT_HEIGHT_FRACTION] and [HexBoard.LANDSCAPE_HEIGHT_RATIO]. Portrait is the
+     * default: only a landscape display gets the flat hexagon and the split board, and a configuration
+     * the runtime has not settled yet behaves like portrait rather than picking a ratio at random.
      */
     private fun hexOrientation(): HexBoard.Orientation =
         if (resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE) {
@@ -506,16 +505,17 @@ class KeyboardView @JvmOverloads constructor(
         val height = if (hexBoard) {
             // The board's natural height is `3.25 x ratio` cell widths: the number row is off, the
             // key-height setting does not apply to a shape whose proportion is fixed. Two things
-            // bound it. The approved board may take no more of the display than
+            // bound it. The board may take no more of the display than
             // HexBoard.LANDSCAPE_HEIGHT_FRACTION of its height; without that cap a wide landscape
             // screen lets the width alone decide a 240 px cell and a 900 px block that fills the
-            // width with no side bands, which is not the board that was approved. The cap turns
-            // that into the approved single scaled board - 486 px of the 1080 px screen, 129.5 px
-            // cells, the leftover width empty, and 55% of the height left for the app above. And the
-            // frame may still be shorter than the capped board - a keyboard sitting under a taller
-            // app - and then it is the frame that decides. In either case the board scales uniformly
-            // into what is left, at the hexagon ratio the orientation calls for: tall in portrait,
-            // regular in landscape.
+            // width with no side bands, which is not the board that was approved. The cap turns that
+            // into the approved landscape board - 486 px of the 1080 px screen, a 157.4 px cell, two
+            // five-cell halves of 787 px anchored to the two edges with the 747 px channel between
+            // them, and 55% of the height left for the app above. And the frame may still be shorter
+            // than the capped board - a keyboard sitting under a taller app - and then it is the frame
+            // that decides. In either case the board scales uniformly into what is left, at the
+            // hexagon ratio and shape the orientation calls for: tall and single in portrait, flat
+            // and split in landscape.
             val orientation = hexOrientation()
             val natural = topPadding + header +
                 HexBoard.cappedBoardHeight(width.toFloat(), displayHeight(), HexBoard.sizing(orientation)) +

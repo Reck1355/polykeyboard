@@ -12,12 +12,15 @@ import org.junit.Test
  * The keyboard's height share, as pure measurements — no device.
  *
  * The gap this closes: nothing capped the IME's height, so the keyboard view self-sized to the
- * board's natural 900 px block on a 2400 px wide landscape screen and the board filled the width
- * with no side bands — not the single uniformly scaled board that was approved. The share is now
+ * board's natural block on a 2400 px wide landscape screen and the board filled the width with no
+ * side bands — not the board that was approved. The share is now
  * [HexBoard.LANDSCAPE_HEIGHT_FRACTION], and it is deliberately *under* half: at 0.55 of a 1080 px
  * landscape screen there was no room left to read what was being typed, and 0.45 gives the block
- * 486 px, leaving 55% of the height to the app above. Portrait is uncapped — it is width-bound and
- * its natural 526.5 px block is nowhere near any sane share — so the share has to be a no-op there.
+ * 486 px, leaving 55% of the height to the app above. That block is now spent on the two-handed split
+ * — two 787 px halves, one anchored to each edge, with the 747 px channel between them — so the
+ * leftover width is the channel rather than the old single board's side bands. Portrait is uncapped —
+ * it is width-bound and its natural 526.5 px block is nowhere near any sane share — so the share has
+ * to be a no-op there, and it is still one board.
  *
  * The screen the keyboard is drawn on is the viewport here: an IME keyboard spans the display's
  * width, and the share is a fraction of the display's height. Every expectation is derived from
@@ -39,6 +42,9 @@ class HexBoardHeightCapTest {
         val capRatio: Float,
         val availableHeight: Float,
         val heightBinds: Boolean,
+        /** The channel between the halves of a split board; 0 when the board is single. */
+        val channelStart: Float,
+        val channelWidth: Float,
     )
 
     private fun measure(
@@ -58,6 +64,8 @@ class HexBoardHeightCapTest {
                 placement.cellWidth,
             availableHeight = available,
             heightBinds = HexBoard.heightBinds(displayWidth, available, sizing),
+            channelStart = placement.channel?.start ?: 0f,
+            channelWidth = placement.channel?.width ?: 0f,
         )
     }
 
@@ -87,7 +95,7 @@ class HexBoardHeightCapTest {
     }
 
     @Test
-    fun `landscape is capped to 486 px - under half the screen - and yields the 129_5 px cell`() {
+    fun `landscape is capped to 486 px - under half the screen - and the flat split fits in it`() {
         val displayHeight = 1080f
         // 0.45 of the screen, straight from the constant — deliberately under half, so the app
         // above keeps the rest and the words being typed stay visible.
@@ -95,8 +103,8 @@ class HexBoardHeightCapTest {
         val cap = HexBoard.heightCap(displayHeight, landscape)
         assertEquals(486f, cap, 0.01f)
 
-        // Uncapped, the width alone would decide a 240 px cell and a 900 px block that fills the
-        // width with no side bands — the defect.
+        // Uncapped, the width alone would decide a 240 px cell and a 741 px block that fills the
+        // width with no channel — the defect.
         assertEquals(240f, HexBoard.cellWidth(2400f), 0.01f)
         assertEquals(240f * HexBoard.blockHeightInCells(landscape), HexBoard.boardHeight(2400f, landscape), 0.01f)
         assertFalse(HexBoard.heightBinds(2400f, HexBoard.boardHeight(2400f, landscape), landscape))
@@ -108,39 +116,51 @@ class HexBoardHeightCapTest {
         assertTrue("the cap must bind in landscape", HexBoard.heightBinds(2400f, available, landscape))
 
         val measured = measure(2400f, displayHeight, landscape)
-        // The approved block, and the 129.5041 px cell that falls out of it — neither is hard-coded
-        // anywhere; both are the cap divided by the derived block height, 3.25 x 1.1547 cells.
+        // The approved block, and the 157.4089 px cell that falls out of it — neither is hard-coded
+        // anywhere; both are the cap divided by the derived block height, 3.25 x 0.95 cells. (This
+        // assertion pinned the old regular ratio's 129.5041 px cell — rewritten, not dropped.)
         assertEquals(cap, measured.blockHeight, 0.01f)
         assertEquals(cap / HexBoard.blockHeightInCells(landscape), measured.cellWidth, 0.001f)
-        assertEquals(129.5041f, measured.cellWidth, 0.001f)
-        assertEquals(1.1547f, measured.capRatio, 0.0001f)
+        assertEquals(157.42f, measured.cellWidth, 0.5f)
+        assertEquals(0.95f, measured.capRatio, 0.0001f)
         assertTrue(measured.cellWidth < 240f)
 
         // The app keeps more than half the screen — the whole reason the share came down.
         assertTrue("the app keeps over half", displayHeight - measured.blockHeight > displayHeight * 0.5f)
 
-        // Centred, with the leftover width empty on both sides in equal bands. Landscape is
-        // expected to change shape — a left/right split board — and this is the assertion that
-        // would move, on purpose, when it does.
-        assertEquals(measured.leftInset, measured.rightBand, 0.01f)
-        assertEquals(10f * measured.cellWidth, 2400f - 2f * measured.leftInset, 0.01f)
-        assertEquals(552.48f, measured.leftInset, 0.05f)
-        assertTrue("the side band is real", measured.leftInset > 1f)
+        // The split replaced the single centred board's equal side bands: there is no side margin any
+        // more, and the free width is the channel between the halves, opening exactly where each
+        // half's inner edge ends.
+        assertEquals(0f, measured.leftInset, 0.01f)
+        assertEquals(0f, measured.rightBand, 0.01f)
+        assertEquals(747.3f, measured.channelWidth, 0.5f)
+        assertTrue("the channel is real", measured.channelWidth > 1f)
+        assertEquals(
+            HexBoard.splitHalves(Layouts.HexQwertyEn).left.spanInCells * measured.cellWidth,
+            measured.channelStart,
+            0.01f,
+        )
     }
 
     @Test
-    fun `the hexagon ratio is per orientation - tall in portrait, regular in landscape`() {
+    fun `the hexagon ratio is per orientation - tall in portrait, flat in landscape`() {
         val portraitMeasured = measure(1080f, 2400f, portrait)
         val landscapeMeasured = measure(2400f, 1080f, landscape)
 
-        // Portrait spends its free height on a taller hexagon: cap height = 1.5 x cell width. This
-        // used to be asserted equal to landscape's 1.1547, which held only while both were regular.
+        // Portrait spends its free height on a taller hexagon: cap height = 1.5 x cell width.
         assertEquals(1.5f, portraitMeasured.capRatio, 0.0001f)
         assertEquals(HexKeyMetrics.PORTRAIT_HEIGHT_FRACTION, portraitMeasured.capRatio, 0.0001f)
 
-        // Landscape keeps the regular hexagon: cap height = 2/sqrt(3) = 1.1547 x cell width.
-        assertEquals(1.1547f, landscapeMeasured.capRatio, 0.0001f)
-        assertEquals(2f / sqrt(3f), landscapeMeasured.capRatio, 0.0001f)
+        // Landscape is the flat 0.95 he picked for the split board — cap height almost exactly the
+        // cell width. This used to assert the regular 2/sqrt(3) = 1.1547, which landscape no longer
+        // draws; the regular ratio stays only as the reference hexagon. (Rewritten, not dropped.)
+        assertEquals(0.95f, landscapeMeasured.capRatio, 0.0001f)
+        assertEquals(HexBoard.LANDSCAPE_HEIGHT_RATIO, landscapeMeasured.capRatio, 0.0001f)
+        assertEquals(2f / sqrt(3f), HexBoard.REGULAR_HEIGHT_RATIO, 0.0001f)
+        assertTrue(
+            "landscape is flatter than the regular hexagon",
+            landscapeMeasured.capRatio < HexBoard.REGULAR_HEIGHT_RATIO,
+        )
 
         // And they differ, deliberately — that is the point of the per-orientation ratio.
         assertTrue(

@@ -20,11 +20,11 @@ import org.junit.Test
  * rather than trusted to the eye, because the picture that would have caught it is the picture
  * that lied about it.
  *
- * Two ratios, one board. The hexagon's proportion is per orientation — portrait is width-bound and
- * spends its free height on a tall hexagon, landscape is height-bound and keeps the regular one —
- * so the ratio, the pitch and the block are asserted at *both* ratios, and the letter grid is
- * asserted to be the same in both. That separation is what stops a ratio change leaking into letter
- * placement.
+ * Two ratios, one letter set. The board's shape is per orientation — portrait is width-bound, single,
+ * and spends its free height on a tall hexagon; landscape is height-bound, flat, and split into two
+ * halves (see [HexSplitBoardTest]) — so the ratio, the pitch and the block are asserted at *both*
+ * ratios, and the letter set is asserted to be the same in both. That separation is what stops a
+ * ratio change leaking into letter placement.
  *
  * Numbers are chosen so the arithmetic is checkable by hand: a 1080 px phone is ten 108 px cells,
  * so half a key is 54 px.
@@ -205,23 +205,29 @@ class HexKeyboardLayoutTest {
     }
 
     @Test
-    fun `the landscape hexagon is regular and its block is three and three quarter cells tall`() {
+    fun `the landscape hexagon is the flat one - 0_95 - and its block follows from it`() {
         val cell = HexBoard.cellWidth(boardWidth)
         val cellHeight = HexBoard.cellHeight(cell, landscape)
         val capHeight = HexBoard.capHeight(cellHeight)
 
-        // "Regular pointy-top hexagon" is exactly cap height = cap width * 2/sqrt(3). This is the
-        // landscape hexagon: it used to be the *only* ratio, so this assertion used to run against
-        // the board's default. It now names landscape, because portrait is deliberately taller.
-        assertEquals(cell * 2f / sqrt(3f), capHeight, 0.01f)
+        // The flat hexagon he picked for the split board: cap height = 0.95 x cap width, a cap almost
+        // exactly as wide as it is tall. This assertion used to pin the *regular* 2/sqrt(3) = 1.1547,
+        // which landscape no longer draws — it is rewritten, not dropped, and the regular ratio stays
+        // as the reference hexagon both orientations are read against.
+        assertEquals(0.95f, landscapeRatio, 0.0001f)
+        assertEquals(HexBoard.LANDSCAPE_HEIGHT_RATIO, landscapeRatio, 0f)
+        assertEquals(2f / sqrt(3f), HexBoard.REGULAR_HEIGHT_RATIO, 0.0001f)
+        assertTrue(
+            "the flat hexagon is shorter than the regular one",
+            landscapeRatio < HexBoard.REGULAR_HEIGHT_RATIO,
+        )
+        assertEquals(cell * 0.95f, capHeight, 0.01f)
         assertEquals(4f / 3f, capHeight / cellHeight, 0.0001f)
-        assertEquals(1.1547f, landscapeRatio, 0.0001f)
-        // Four rows at their own pitch, and the block the caps actually draw: three pitches plus
-        // one cap. That is the approved "3.75 cells", whose exact value is 3.7528 because one
-        // pitch is sqrt(3)/2 of a cell — the same relation that makes the cap regular.
+        // Four rows at their own pitch, and the block the caps actually draw: three pitches plus one
+        // cap — 3.25 x 0.95 = 3.0875 cells.
         assertEquals(4f * cellHeight, HexBoard.contentHeight(boardWidth, landscape), 0.01f)
         assertEquals(3.25f * landscapeRatio * cell, HexBoard.boardHeight(boardWidth, landscape), 0.01f)
-        assertEquals(3.75f * cell, HexBoard.boardHeight(boardWidth, landscape), 0.5f)
+        assertEquals(3.0875f * cell, HexBoard.boardHeight(boardWidth, landscape), 0.5f)
     }
 
     @Test
@@ -239,9 +245,11 @@ class HexKeyboardLayoutTest {
             assertEquals("$name: block in cells", 3.25f * ratio, HexBoard.blockHeightInCells(sizing), 0.0001f)
             assertEquals("$name: factor", 3.25f, HexBoard.BLOCK_CAP_FACTOR, 0.0001f)
         }
-        // The invariant's whole point: the regular ratio is the one the removed 3.7528 belonged to,
-        // and it falls out of the derivation instead of being written down.
-        assertEquals(3.7528f, HexBoard.blockHeightInCells(landscape), 0.0001f)
+        // The block in cells falls out of the derivation instead of being written down: landscape's
+        // flat 0.95 gives 3.25 x 0.95 = 3.0875 cells (the 3.7528 this used to pin belonged to the
+        // regular hexagon, which landscape no longer draws — rewritten, not dropped), and portrait
+        // keeps 3.25 x 1.5 = 4.875.
+        assertEquals(3.0875f, HexBoard.blockHeightInCells(landscape), 0.0001f)
         assertEquals(4.875f, HexBoard.blockHeightInCells(portrait), 0.0001f)
     }
 
@@ -267,7 +275,7 @@ class HexKeyboardLayoutTest {
     }
 
     @Test
-    fun `landscape is capped shorter - 45 percent of the height, so the app keeps the rest`() {
+    fun `landscape is capped shorter - 45 percent of the height - and split into two halves`() {
         val displayHeight = 1080f
         val available = HexBoard.cappedBoardHeight(2400f, displayHeight, landscape)
 
@@ -281,25 +289,32 @@ class HexKeyboardLayoutTest {
         val board = placement(sizing = landscape, viewportWidth = 2400f, availableHeight = available)
         val cell = board.cellWidth
 
-        assertEquals(1.1547f, landscapeRatio, 0.0001f)
-        // 486 / 3.7527766 — the *derived* block-in-cells, not the 3.7528 it rounds to. (Dividing by
-        // the rounded 3.7528 is what makes this 129.53; the exact value is 129.5041.)
-        assertEquals(129.5041f, cell, 0.001f)
+        // The flat landscape ratio, and the 157.4089 px cell that falls out of it: the capped 486 px
+        // block over the derived 3.25 x 0.95 = 3.0875 cells. This assertion used to pin the regular
+        // 1.1547 and its 129.5041 px cell, which the flat hexagon replaced — rewritten, not dropped.
+        assertEquals(0.95f, landscapeRatio, 0.0001f)
+        assertEquals(486f / HexBoard.blockHeightInCells(landscape), cell, 0.0001f)
+        assertEquals(157.42f, cell, 0.5f)
         assertEquals(486f, board.boardHeight, 0.01f)
-        assertEquals(10f * cell, board.boardWidth, 0.01f)
-        assertEquals(1295.04f, board.boardWidth, 0.05f)
 
         // The block is 45% of the screen and the app above keeps the other 55%.
         assertEquals(0.45f, board.boardHeight / displayHeight, 0.001f)
         assertTrue("the app keeps more than half the height", displayHeight - board.boardHeight > displayHeight * 0.5f)
 
-        // Centred, with the leftover width split into two equal bands — 552.48 px each. This is the
-        // centring assertion a left/right split board would deliberately break; it is pinned here so
-        // that change cannot arrive silently.
-        val band = (2400f - board.boardWidth) / 2f
-        assertEquals(552.48f, band, 0.05f)
-        assertEquals(band, board.leftInset, 0.01f)
-        assertEquals(band, 2400f - board.boardWidth - board.leftInset, 0.01f)
+        // The approved split: two five-cell halves anchored to the two edges — 787.1 px each — with
+        // the empty 747.3 px channel between them. This replaced the single centred board's two
+        // 552.48 px side bands; the old band assertion is rewritten, not dropped, and the board now
+        // spans the viewport instead of sitting in the middle of it.
+        assertTrue(board.split)
+        assertEquals(0f, board.leftInset, 0.01f)
+        assertEquals(2400f, board.boardWidth, 0.01f)
+        assertEquals(787.1f, HexBoard.SPLIT_COLUMNS_PER_HALF * cell, 0.5f)
+        val channel = board.channel!!
+        assertEquals(747.3f, channel.width, 0.5f)
+        assertEquals(channel.start, board.keys.filter { it.centerX < channel.start }.maxOf { it.right }, 0.01f)
+        assertEquals(channel.end, board.keys.filter { it.centerX > channel.end }.minOf { it.left }, 0.01f)
+        // The screen's middle is dead space: a tap there is aimed at neither hand.
+        assertTrue(channel.contains(1200f))
     }
 
     @Test
@@ -331,7 +346,7 @@ class HexKeyboardLayoutTest {
     }
 
     @Test
-    fun `the letter grid is identical in both orientations - only the cell's aspect moves`() {
+    fun `the letter set is the same in both orientations - the split only rearranges it`() {
         val portraitBoard = placement(sizing = portrait)
         val landscapeBoard = placement(
             sizing = landscape,
@@ -339,57 +354,52 @@ class HexKeyboardLayoutTest {
             availableHeight = HexBoard.cappedBoardHeight(2400f, 1080f, landscape),
         )
 
-        // Same rows, same counts.
-        val portraitCounts = (0..3).map { row -> portraitBoard.keys.count { it.row == row } }
-        val landscapeCounts = (0..3).map { row -> landscapeBoard.keys.count { it.row == row } }
-        assertEquals(listOf(10, 9, 9, 7), portraitCounts)
-        assertEquals(portraitCounts, landscapeCounts)
-
-        // Same stagger, measured in cells so the different cell size cannot matter.
-        assertCells(
-            listOf(0f, 0.5f, 0f, 0.5f),
-            HexBoard.rowOffsetsInCells(portraitBoard.keys, portraitBoard.cellWidth),
-            "portrait row offsets",
-        )
-        assertCells(
-            HexBoard.rowOffsetsInCells(portraitBoard.keys, portraitBoard.cellWidth),
-            HexBoard.rowOffsetsInCells(landscapeBoard.keys, landscapeBoard.cellWidth),
-            "same row offsets in both orientations",
-        )
-
-        // Same letters, in the same row and the same column — in cells, not pixels, so the ratio
-        // cannot leak into letter placement.
-        fun letterCells(board: HexBoard.HexPlacement): List<Triple<String, Int, Float>> {
-            val boardLeft = board.keys.minOf { it.left }
-            return board.keys
-                .filter { it.key.type == KeyType.CHARACTER && it.key.outputText.length == 1 }
-                .sortedBy { it.key.outputText }
-                .map { Triple(it.key.outputText, it.row, (it.centerX - boardLeft) / board.cellWidth) }
-        }
-
-        val portraitLetters = letterCells(portraitBoard)
-        val landscapeLetters = letterCells(landscapeBoard)
-        assertEquals("letter count", portraitLetters.size, landscapeLetters.size)
-        portraitLetters.zip(landscapeLetters).forEach { (p, l) ->
-            assertEquals("same letter", p.first, l.first)
-            assertEquals("same row for ${p.first}", p.second, l.second)
-            assertEquals("same column for ${p.first}", p.third, l.third, 0.0001f)
-        }
-
-        // The fused three-cell space, centred on the board, in both.
+        // Same stagger, measured in cells so the different cell size cannot matter. The split keeps
+        // each row's phase, read from its half's own edge, so the offsets off the board's own left edge
+        // still read 0 / 0.5 / 0 / 0.5 — the honeycomb invariant survives the split.
         for ((name, board) in listOf("portrait" to portraitBoard, "landscape" to landscapeBoard)) {
-            val spaces = board.keys.filter { it.row == 3 && it.key.type == KeyType.SPACE }
-            assertEquals("$name: one fused space", 1, spaces.size)
-            val space = spaces.single()
-            val boardLeft = board.keys.minOf { it.left }
-            assertEquals("$name: space spans three cells", 3f * board.cellWidth, space.width, 0.01f)
-            assertEquals(
-                "$name: space centred on the board",
-                board.boardWidth / 2f,
-                space.centerX - boardLeft,
-                0.01f,
+            assertCells(
+                listOf(0f, 0.5f, 0f, 0.5f),
+                HexBoard.rowOffsetsInCells(board.keys, board.cellWidth),
+                "$name row offsets",
+            )
+            assertCells(
+                listOf(0.5f, 0.5f, 0.5f),
+                HexBoard.adjacentStaggerStepsInCells(board.keys, board.cellWidth),
+                "$name: adjacent stagger steps",
             )
         }
+
+        // Same letters, in the same QWERTY order left to right. This test used to compare letter
+        // *columns* and assert the whole grid identical in both orientations — which the split
+        // deliberately breaks, and the halves' own division is pinned in HexSplitBoardTest. The
+        // letter-set comparison below is what that assertion is rewritten to.
+        fun letterOrder(board: HexBoard.HexPlacement): List<String> = (0..3).flatMap { row ->
+            board.keys.filter { it.row == row }.sortedBy { it.left }.map { it.key.outputText }
+        }.filter { it.length == 1 && it[0] in 'a'..'z' }
+
+        val expected = listOf("q", "w", "e", "r", "t") + listOf("y", "u", "i", "o", "p") +
+            listOf("a", "s", "d", "f", "g") + listOf("h", "j", "k", "l") +
+            listOf("z", "x", "c", "v") + listOf("b", "n", "m")
+        assertEquals(expected, letterOrder(portraitBoard))
+        assertEquals(expected, letterOrder(landscapeBoard))
+
+        // The space is the one key the split reshapes: one fused three-cell bar, centred, in portrait;
+        // two single cells in landscape, one per half.
+        val portraitSpace = portraitBoard.keys.filter { it.key.type == KeyType.SPACE }
+        assertEquals("portrait: one fused space", 1, portraitSpace.size)
+        assertEquals(3f, portraitSpace.single().key.widthWeight, 0.0001f)
+        val portraitLeft = portraitBoard.keys.minOf { it.left }
+        assertEquals(
+            "portrait: space centred on the board",
+            portraitBoard.boardWidth / 2f,
+            portraitSpace.single().centerX - portraitLeft,
+            0.01f,
+        )
+
+        val landscapeSpaces = landscapeBoard.keys.filter { it.key.type == KeyType.SPACE }
+        assertEquals("landscape: two spaces, one per half", 2, landscapeSpaces.size)
+        landscapeSpaces.forEach { assertEquals(1f, it.key.widthWeight, 0.0001f) }
     }
 
     @Test
@@ -414,7 +424,7 @@ class HexKeyboardLayoutTest {
     }
 
     @Test
-    fun `portrait and landscape are the same board, sized to fit and centred`() {
+    fun `portrait is one centred board and landscape is two halves anchored to the edges`() {
         // Portrait, 1080 px wide: the frame holds the width-derived cell, so ten columns span the
         // width and there is no side margin.
         val portraitBoard = placement(
@@ -433,46 +443,115 @@ class HexKeyboardLayoutTest {
 
         assertEquals(108f, portraitBoard.cellWidth, 0.01f)
         assertEquals(240f, HexBoard.cellWidth(2400f), 0.01f)
-        assertEquals(129.5041f, landscapeBoard.cellWidth, 0.001f)
+        assertEquals(157.42f, landscapeBoard.cellWidth, 0.5f)
         assertEquals(486f, landscapeBoard.boardHeight, 0.01f)
         assertEquals(0.45f, landscapeBoard.boardHeight / 1080f, 0.01f)
 
-        val orientations = listOf(
-            "portrait" to (portraitBoard to (1080f to HexBoard.boardHeight(1080f, portrait))),
-            "landscape" to (landscapeBoard to (2400f to landscapeAvailable)),
+        // Portrait keeps every promise of a single board — sized to fit, centred, no side margin.
+        assertFitsCentredAndInside("portrait", portraitBoard, 1080f, HexBoard.boardHeight(1080f, portrait))
+        assertCells(
+            listOf(0f, 0.5f, 0f, 0.5f),
+            HexBoard.rowOffsetsInCells(portraitBoard.keys, portraitBoard.cellWidth),
+            "portrait row offsets",
         )
-        for ((name, pair) in orientations) {
-            val (board, viewport) = pair
-            val (viewportWidth, availableHeight) = viewport
-            assertFitsCentredAndInside(name, board, viewportWidth, availableHeight)
-        }
+        assertEquals(listOf(10, 9, 9, 7), (0..3).map { row -> portraitBoard.keys.count { it.row == row } })
 
-        // The same single board in both: the stagger and the row shape do not change with the
-        // orientation — only the cell size, the ratio and the margins do.
-        val portraitOffsets = HexBoard.rowOffsetsInCells(portraitBoard.keys, portraitBoard.cellWidth)
-        val landscapeOffsets = HexBoard.rowOffsetsInCells(landscapeBoard.keys, landscapeBoard.cellWidth)
-        assertEquals(portraitOffsets.size, landscapeOffsets.size)
-        portraitOffsets.zip(landscapeOffsets).forEach { (above, below) ->
-            assertEquals("same row offsets in both orientations", above, below, 0.0001f)
-        }
-        for ((name, board) in listOf("portrait" to portraitBoard, "landscape" to landscapeBoard)) {
-            assertCells(
-                listOf(0.5f, 0.5f, 0.5f),
-                HexBoard.adjacentStaggerStepsInCells(board.keys, board.cellWidth),
-                "$name: adjacent stagger steps",
-            )
-            assertEquals(listOf(10, 9, 9, 7), (0..3).map { row -> board.keys.count { it.row == row } })
-        }
+        // Landscape is the split: two halves pinned to the two edges with the channel between them.
+        // It no longer shares portrait's centring or its side bands — that is the change, and this is
+        // where the old shared assertions are rewritten to the two orientations' own promises.
+        assertSplitFitsBothEdges("landscape", landscapeBoard, 2400f, landscapeAvailable)
+        assertCells(
+            listOf(0f, 0.5f, 0f, 0.5f),
+            HexBoard.rowOffsetsInCells(landscapeBoard.keys, landscapeBoard.cellWidth),
+            "landscape row offsets",
+        )
+        val landscapeChannel = landscapeBoard.channel!!
+        assertEquals(
+            listOf(5, 5, 5, 4),
+            (0..3).map { row ->
+                landscapeBoard.keys.count { it.row == row && it.centerX < landscapeChannel.start }
+            },
+        )
+        assertEquals(
+            listOf(5, 4, 4, 4),
+            (0..3).map { row ->
+                landscapeBoard.keys.count { it.row == row && it.centerX > landscapeChannel.end }
+            },
+        )
 
-        // The one thing the orientations deliberately do NOT share: the hexagon ratio. Portrait's
-        // is the tall 1.5 that spends the free height; landscape's is the regular 1.1547. The old
-        // test asserted these two were equal, which was true only while both were 1.1547.
+        // The one thing the orientations deliberately do NOT share: the hexagon ratio. Portrait's is
+        // the tall 1.5 that spends the free height; landscape's is the flat 0.95 he picked for the
+        // split. The old test asserted these two were equal, which was true only while both were
+        // 1.1547.
         assertEquals(1.5f, scale(portraitBoard.cellWidth, portrait), 0.0001f)
-        assertEquals(1.1547f, scale(landscapeBoard.cellWidth, landscape), 0.0001f)
+        assertEquals(0.95f, scale(landscapeBoard.cellWidth, landscape), 0.0001f)
         assertTrue(
             "portrait's hexagon is the taller one",
             scale(portraitBoard.cellWidth, portrait) > scale(landscapeBoard.cellWidth, landscape),
         )
+    }
+
+    /**
+     * The split's promises, as one check: two halves anchored to the viewport's edges, the block
+     * filling the frame, the flat hexagon kept, and the channel empty between them.
+     *
+     * The landscape counterpart of [assertFitsCentredAndInside] — the split deliberately does not
+     * centre, so it gets its own promises rather than a weakened version of the single board's.
+     */
+    private fun assertSplitFitsBothEdges(
+        name: String,
+        placement: HexBoard.HexPlacement,
+        viewportWidth: Float,
+        availableHeight: Float,
+    ) {
+        val sizing = placement.sizing
+        val channel = placement.channel ?: error("$name: a split board has a channel")
+        val left = placement.keys.filter { it.centerX < channel.start }
+        val right = placement.keys.filter { it.centerX > channel.end }
+
+        // 1. The derived cell makes the block fit the available height, and fill it exactly — the
+        //    height is what binds in landscape.
+        assertTrue("$name: block fits", placement.boardHeight <= availableHeight + 0.01f)
+        assertEquals("$name: block fills the frame", availableHeight, placement.boardHeight, 0.01f)
+        assertTrue("$name: height binds", HexBoard.heightBinds(viewportWidth, availableHeight, sizing))
+
+        // 2. The hexagon keeps the orientation's ratio — the flat 0.95.
+        val capHeight = HexBoard.capHeight(HexBoard.cellHeight(placement.cellWidth, sizing))
+        assertEquals("$name: cap ratio", sizing.heightRatio, capHeight / placement.cellWidth, 0.0001f)
+        assertEquals("$name: placement reports its ratio", sizing.heightRatio, placement.heightRatio, 0f)
+
+        // 3. Each half is anchored to its own edge: the outer rows sit on the edges, so there is no
+        //    side margin, and the channel is the whole of the space between the halves.
+        assertEquals("$name: anchored to the left edge", 0f, left.minOf { it.left }, 0.01f)
+        assertEquals("$name: anchored to the right edge", viewportWidth, right.maxOf { it.right }, 0.01f)
+        assertEquals("$name: no side margin", 0f, placement.leftInset, 0.01f)
+        assertTrue("$name: the channel is real", channel.width > 1f)
+        assertEquals(
+            "$name: channel opens at the left inner edge",
+            left.maxOf { it.right },
+            channel.start,
+            0.01f,
+        )
+        assertEquals(
+            "$name: channel opens at the right inner edge",
+            right.minOf { it.left },
+            channel.end,
+            0.01f,
+        )
+
+        // 4. No key crosses the channel, caps included, and nothing leaves the viewport.
+        placement.keys.forEach { key ->
+            val label = key.key.label.ifEmpty { key.key.type.name }
+            assertTrue(
+                "$name: $label is on one side of the channel",
+                key.right <= channel.start + 0.01f || key.left >= channel.end - 0.01f,
+            )
+            assertTrue("$name: $label cell within width", key.left >= -0.01f && key.right <= viewportWidth + 0.01f)
+            val cap = KeyGeometry.hexShapeFor(key)
+            assertTrue("$name: $label cap within width", cap.left >= -0.01f && cap.right <= viewportWidth + 0.01f)
+            assertTrue("$name: $label cap below the top edge", cap.top >= -0.1f)
+            assertTrue("$name: $label cap above the bottom edge", cap.bottom <= availableHeight + 0.1f)
+        }
     }
 
     /** The orientation's four promises, as one check so neither orientation gets a weaker test. */
