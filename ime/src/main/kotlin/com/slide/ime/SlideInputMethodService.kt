@@ -1533,7 +1533,7 @@ class SlideInputMethodService :
         literalWordInProgress = false
         if (settings.suggestionsEnabled) {
             stripMode = StripMode.Gesture
-            suggestionStrip?.setSuggestions(candidates.map { it.word })
+            suggestionStrip?.setSuggestions(StripSuggestions.wordsOnly(candidates.map { it.word }))
         } else {
             clearSuggestions()
         }
@@ -1819,7 +1819,7 @@ class SlideInputMethodService :
                 ) {
                     stripMode = StripMode.GesturePreview
                     lastGestureCommit = null
-                    suggestionStrip?.setSuggestions(candidates.map { it.word })
+                    suggestionStrip?.setSuggestions(StripSuggestions.wordsOnly(candidates.map { it.word }))
                 }
             }
         }
@@ -3721,7 +3721,10 @@ class SlideInputMethodService :
         pendingAutocorrection = appliedAutocorrection
 
         stripMode = StripMode.Typing
-        suggestionStrip?.setSuggestions(result.words.map { it.word })
+        // The engine grades each candidate, and only a Correction says the word in front of
+        // the cursor is a typo. Mapping to bare words here is what left the strip unable to
+        // mark a fix differently from a completion.
+        suggestionStrip?.setSuggestions(StripSuggestions.from(result.words))
     }
 
     private fun recordTypedDecision(outcome: DecisionOutcome) {
@@ -4401,7 +4404,7 @@ class SlideInputMethodService :
         }
 
         stripMode = StripMode.Prediction
-        suggestionStrip?.setSuggestions(predictions)
+        suggestionStrip?.setSuggestions(StripSuggestions.wordsOnly(predictions))
     }
 
     /**

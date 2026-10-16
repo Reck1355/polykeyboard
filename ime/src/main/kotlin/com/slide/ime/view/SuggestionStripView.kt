@@ -82,7 +82,7 @@ class SuggestionStripView(context: Context) : View(context) {
     private fun sp(value: Float) =
         TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_SP, value, resources.displayMetrics)
 
-    private val words = ArrayList<String>(MAX_VISIBLE)
+    private val words = ArrayList<StripSuggestion>(MAX_VISIBLE)
 
     /** See [ellipsized]. */
     private var ellipsizedWidth = 0f
@@ -113,6 +113,9 @@ class SuggestionStripView(context: Context) : View(context) {
         strokeWidth = dp(1f)
     }
     private val pressedPaint = Paint(Paint.ANTI_ALIAS_FLAG)
+    private val markPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        strokeCap = Paint.Cap.ROUND
+    }
     private val iconPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         strokeCap = Paint.Cap.ROUND
     }
@@ -171,8 +174,15 @@ class SuggestionStripView(context: Context) : View(context) {
             }
 
             val index = virtualViewId - A11Y_WORD_BASE
-            val word = words.getOrNull(index).orEmpty()
-            node.contentDescription = if (index == 0) "$word, best suggestion" else word
+            val candidate = words.getOrNull(index)
+            val word = candidate?.word.orEmpty()
+            node.contentDescription = buildList {
+                add(word)
+                if (index == 0) add("best suggestion")
+                // Spoken as well as drawn: the underline is the only mark that separates a typo
+                // fix from a word completion, and a mark only some users can see is not a label.
+                if (candidate?.isCorrection == true) add("correction")
+            }.joinToString(", ")
             node.addAction(AccessibilityNodeInfoCompat.ACTION_LONG_CLICK)
             val cellWidth = suggestionWidth() / MAX_VISIBLE
             val visualSlot = SuggestionPlacement.slotForCandidate(words.size, index)
@@ -213,7 +223,7 @@ class SuggestionStripView(context: Context) : View(context) {
                 return true
             }
             val index = virtualViewId - A11Y_WORD_BASE
-            val word = words.getOrNull(index) ?: return false
+            val word = words.getOrNull(index)?.word ?: return false
             return when (action) {
                 AccessibilityNodeInfo.ACTION_CLICK -> {
                     listener?.onSuggestionPicked(index, word)
@@ -241,7 +251,14 @@ class SuggestionStripView(context: Context) : View(context) {
      * Three rather than the decoder's five: past that the cells are too narrow to read at a glance
      * or to hit reliably, and the fourth and fifth candidates are almost never the intended word.
      */
-    fun setSuggestions(candidates: List<String>) {
+    /**
+     * Shows candidates that each know whether the keyboard is offering them as a fix.
+     *
+     * One list of self-describing candidates rather than a list of words plus a parallel list of
+     * flags: the placement moves a candidate between cells, and two lists are one index away from
+     * underlining the wrong word. Callers with no opinion on labels pass [StripSuggestions.wordsOnly].
+     */
+    fun setSuggestions(candidates: List<StripSuggestion>) {
         val requested = candidates.take(MAX_VISIBLE)
         if (words.size == requested.size && words.indices.all { words[it] == requested[it] }) return
         // A pending hold captured a slot, not a word, and re-reads the list when it fires. Left
@@ -349,12 +366,27 @@ class SuggestionStripView(context: Context) : View(context) {
                 if (index == 0) keyboardTheme.suggestionHighlightText else keyboardTheme.suggestionText
             textPaint.typeface = if (index == 0) Typeface.DEFAULT_BOLD else Typeface.DEFAULT
 
-            canvas.drawText(
-                ellipsized(words[index], cellWidth - dp(12f), bold = index == 0),
-                left + cellWidth / 2f,
-                baseline,
-                textPaint,
-            )
+            val label = ellipsized(words[index].word, cellWidth - dp(12f), bold = index == 0)
+            canvas.drawText(label, left + cellWidth / 2f, baseline, textPaint)
+
+            // A typo fix and a word completion look identical otherwise: same cell, same weight,
+            // same colour. The underline says the keyboard thinks what you typed was wrong, which
+            // is the one thing you need to know before it silently changes the word at the space.
+            // Drawn in the same accent as the top-choice colour, because the two marks answer the
+            // same question and should not look like two different systems.
+            if (words[index].isCorrection) {
+                markPaint.color = keyboardTheme.suggestionHighlightText
+                markPaint.strokeWidth = dp(2f)
+                val half = minOf(textPaint.measureText(label), cellWidth - dp(12f)) / 2f
+                val underlineY = baseline + dp(3f)
+                canvas.drawLine(
+                    left + cellWidth / 2f - half,
+                    underlineY,
+                    left + cellWidth / 2f + half,
+                    underlineY,
+                    markPaint,
+                )
+            }
         }
         val inset = dp(10f)
         dividerPaint.color = keyboardTheme.divider
@@ -603,8 +635,8 @@ class SuggestionStripView(context: Context) : View(context) {
             announceForAccessibility("Voice typing")
             listener?.onVoiceRequested()
         } else if (index in words.indices && !held) {
-            announceForAccessibility("Suggestion ${words[index]}")
-            listener?.onSuggestionPicked(index, words[index])
+            announceForAccessibility("Suggestion ${words[index].word}")
+            listener?.onSuggestionPicked(index, words[index].word)
         }
     }
 
@@ -627,7 +659,7 @@ class SuggestionStripView(context: Context) : View(context) {
             longPressFired = true
             pressedIndex = -1
             invalidate()
-            listener?.onSuggestionHeld(index, words[index])
+            listener?.onSuggestionHeld(index, words[index].word)
         }
         longPressRunnable = runnable
         handler.postDelayed(runnable, ViewConfiguration.getLongPressTimeout().toLong())
@@ -723,7 +755,7 @@ class SuggestionStripView(context: Context) : View(context) {
     }
 
     private fun accessibilityDescription(): String = buildList {
-        if (words.isNotEmpty()) add("Suggestions: ${words.joinToString(", ")}")
+        if (words.isNotEmpty()) add("Suggestions: ${words.joinToString(", ") { it.word }}")
         else if (emptyMessage.isNotEmpty()) add(emptyMessage)
         add("Keyboard settings button at the left")
         if (words.isEmpty()) add("Clipboard and edit text buttons beside it")
@@ -738,6 +770,30 @@ class SuggestionStripView(context: Context) : View(context) {
         const val A11Y_SETTINGS = 101
         const val A11Y_CLIPBOARD = 102
         const val A11Y_EDIT = 103
+    }
+}
+
+/**
+ * A candidate as the strip needs it: the word, and whether the keyboard is offering it as a fix.
+ *
+ * The two travel in one object rather than as parallel lists on purpose. The centre-first
+ * placement moves a candidate between cells, and a separate array of flags is one index away from
+ * underlining the wrong word the moment the two get out of step.
+ */
+data class StripSuggestion(val word: String, val isCorrection: Boolean = false)
+
+/** Pure label lookup, kept out of the View so "is this cell a fix" stays a testable question. */
+internal object SuggestionMarks {
+
+    /**
+     * True when the candidate [candidateAtSlot] puts in [slot] is a typo fix.
+     *
+     * The mark belongs to the candidate, not to the cell, so it is resolved through the same
+     * placement mapping the drawing and hit-testing use.
+     */
+    fun isCorrectionAtSlot(candidates: List<StripSuggestion>, slot: Int): Boolean {
+        val index = SuggestionPlacement.candidateAtSlot(candidates.size, slot) ?: return false
+        return candidates[index].isCorrection
     }
 }
 

@@ -1,7 +1,9 @@
 package com.slide.ime.view
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class SuggestionPlacementTest {
@@ -47,5 +49,35 @@ class SuggestionPlacementTest {
             2,
             SuggestionStripLayout.slotAt(340f, 360f, 48f, voiceEnabled = false, slotCount = 3),
         )
+    }
+
+    @Test
+    fun `the correction mark follows its candidate into the centre`() {
+        val candidates = listOf(
+            StripSuggestion("the", isCorrection = true),
+            StripSuggestion("then"),
+            StripSuggestion("ten"),
+        )
+
+        assertTrue(SuggestionMarks.isCorrectionAtSlot(candidates, slot = 1))
+        assertFalse(SuggestionMarks.isCorrectionAtSlot(candidates, slot = 0))
+        assertFalse(SuggestionMarks.isCorrectionAtSlot(candidates, slot = 2))
+    }
+
+    @Test
+    fun `a marked alternative keeps its mark beside an unmarked centre`() {
+        val candidates = listOf(
+            StripSuggestion("then"),
+            StripSuggestion("the", isCorrection = true),
+        )
+
+        assertFalse("the centre is a completion and must not be underlined", SuggestionMarks.isCorrectionAtSlot(candidates, slot = 1))
+        assertTrue(SuggestionMarks.isCorrectionAtSlot(candidates, slot = 0))
+    }
+
+    @Test
+    fun `an empty strip and an empty cell are never marked`() {
+        assertFalse(SuggestionMarks.isCorrectionAtSlot(emptyList(), slot = 1))
+        assertFalse(SuggestionMarks.isCorrectionAtSlot(listOf(StripSuggestion("the")), slot = 0))
     }
 }
