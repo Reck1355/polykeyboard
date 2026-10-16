@@ -102,6 +102,10 @@ EXPECTED_RUNTIME_DATA_PATHS=(
     assets/ggml-small.en-q5_1.bin
     assets/lexicon_en.bin
     assets/lexicon_es.bin
+    assets/pinyin/PINYIN-LICENSES.md
+    assets/pinyin/bigrams.bin
+    assets/pinyin/dict.bin
+    assets/pinyin/syllables.txt
     assets/swipe/decoder.pte
     assets/swipe/encoder.pte
     assets/trigrams_en.bin

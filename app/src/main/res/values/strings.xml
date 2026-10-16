@@ -1,4 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Polykeyboard</string>
+    <!--
+      The pinyin engine's data comes from three openly licensed sources, and two of them require
+      credit wherever the data is redistributed. This string is that credit; the screen that shows it
+      lands with the Chinese board, and the build already ships PINYIN-LICENSES.md beside the data
+      itself. A test asserts every name and licence below survives editing.
+    -->
+    <string name="pinyin_attribution">Chinese input data: CC-CEDICT (CC BY-SA 4.0), jieba dictionary (MIT), Tatoeba sentences (CC BY 2.0).</string>
 </resources>
