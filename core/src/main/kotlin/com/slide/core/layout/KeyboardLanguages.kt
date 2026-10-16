@@ -32,6 +32,17 @@ object KeyboardLanguages {
     const val SPANISH = "es"
 
     /**
+     * Mandarin Chinese.
+     *
+     * Its data is not a lexicon beside the others: pinyin input needs a word table keyed by
+     * romanisation plus a language model, both of which live in the engine module behind
+     * `PinyinEngine`. That engine has shipped inside this APK since the pinyin groundwork landed and
+     * had no caller until the keyboard learned to read it, so the board here is the same QWERTY the
+     * user already knows and only the input method's own handling of a keystroke differs.
+     */
+    const val CHINESE = "zh"
+
+    /**
      * Languages with shipped data — a board, a lexicon and models.
      *
      * Membership is not a licence decision by itself: the *data* behind each entry is pinned in
@@ -39,7 +50,7 @@ object KeyboardLanguages {
      * asset to load would leave it typing with no dictionary at all, so an unsupported tag falls
      * back rather than reaching a board with nothing behind it.
      */
-    val SUPPORTED: Set<String> = setOf(FALLBACK, SPANISH)
+    val SUPPORTED: Set<String> = setOf(FALLBACK, SPANISH, CHINESE)
 
     /**
      * One selectable language: the shipped language it resolves to, the subtype tag it is declared
@@ -60,6 +71,7 @@ object KeyboardLanguages {
     val SWITCHABLE: List<Entry> = listOf(
         Entry(FALLBACK, "en-US", "English"),
         Entry(SPANISH, "es-ES", "Español"),
+        Entry(CHINESE, "zh-CN", "中文"),
     )
 
     /** The entry for a resolved [language], or the fallback's when nothing matches. */
@@ -91,7 +103,7 @@ object KeyboardLanguages {
      *
      * Accepts whatever form the platform uses — `en_US`, `es-ES`, `es`, `es-419` — by taking the
      * primary subtag, and returns [FALLBACK] for anything else, including null. A tag for a
-     * language this build has no data for (French, Chinese) resolves to English rather than to a
+     * language this build has no data for (French, Japanese) resolves to English rather than to a
      * half-installed board, because the alternative on a phone is a keyboard that types but
      * suggests nothing.
      */

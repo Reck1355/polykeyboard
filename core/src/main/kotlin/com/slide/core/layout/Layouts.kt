@@ -722,6 +722,18 @@ object Layouts {
     private val BOARDS: Map<String, LanguageBoards> = mapOf(
         KeyboardLanguages.FALLBACK to LanguageBoards(QwertyEn, HexQwertyEn, HexEmailEn, HexUriEn),
         KeyboardLanguages.SPANISH to LanguageBoards(QwertyEs, HexQwertyEs, HexEmailEs, HexUriEs),
+        // Mandarin needs no board of its own. Pinyin is typed on the letters a person already knows
+        // the positions of, so the English boards are the Chinese boards, and the difference between
+        // the two languages lives in how a keystroke is handled rather than in where the keys are.
+        // They are copies carrying the Chinese tag rather than the English boards themselves,
+        // because a board declares the language it is drawn for and a board that answered "en" here
+        // would be a second, quieter answer to the question this object exists to answer once.
+        KeyboardLanguages.CHINESE to LanguageBoards(
+            QwertyEn.copy(languageTag = KeyboardLanguages.CHINESE),
+            HexQwertyEn.copy(languageTag = KeyboardLanguages.CHINESE),
+            HexEmailEn.copy(languageTag = KeyboardLanguages.CHINESE),
+            HexUriEn.copy(languageTag = KeyboardLanguages.CHINESE),
+        ),
     )
 
     /**

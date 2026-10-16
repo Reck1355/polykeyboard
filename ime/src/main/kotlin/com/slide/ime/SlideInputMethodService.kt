@@ -37,6 +37,8 @@ import com.slide.core.layout.Key
 import com.slide.core.layout.KeyType
 import com.slide.core.layout.KeyboardLayout
 import com.slide.core.layout.KeyboardLanguages
+import com.slide.engine.pinyin.PinyinEngine
+import com.slide.ime.view.StripSuggestion
 import com.slide.core.layout.Layouts
 import com.slide.core.settings.KeyboardSettings
 import com.slide.core.settings.SettingsRepository
@@ -259,6 +261,19 @@ class SlideInputMethodService :
      * subtype, so there is exactly one answer at a time.
      */
     private var language = KeyboardLanguages.FALLBACK
+
+    /** The romanisation being typed in Mandarin, before any word table has been asked. */
+    private val pinyinTyping = PinyinTyping()
+
+    /**
+     * Mandarin's word table and language model, loaded with the language and dropped with it.
+     *
+     * Held here rather than loaded on the first keystroke, because reading three megabytes of assets
+     * is not something to do between a finger landing and a letter appearing. Null means Mandarin is
+     * not the live language, or its data could not be read, in which case a keystroke falls back to
+     * the Latin path rather than doing nothing.
+     */
+    private var pinyinEngine: PinyinEngine? = null
 
     /** The in-flight load of [language]'s engines, cancelled when the language changes again. */
     private var languageResourcesJob: Job? = null
@@ -630,6 +645,12 @@ class SlideInputMethodService :
         val resolved = KeyboardLanguages.resolve(subtypeLanguageTag)
         if (resolved == language) return
         language = resolved
+        // Half-typed pinyin is not a word in any other language, and carrying it across a switch
+        // would leave the next keystroke completing a romanisation the user can no longer see a
+        // reason for. The engine is dropped with the other engines for the same reason a Spanish
+        // swipe must not be decoded by the English model.
+        pinyinTyping.clear()
+        pinyinEngine = null
         gestureKeyMapCache = null
         cancelGestureInputSequence()
         gestureDecoder = null
@@ -762,6 +783,15 @@ class SlideInputMethodService :
             // A faster switch may have landed while this was reading: the language wanted now is
             // the one the caller has already moved to, not the one this coroutine started for.
             if (language != requested) return@launch
+            // Mandarin's resources are not a lexicon: pinyin reads a word table keyed by romanisation
+            // and a language model, both inside the engine module. Read in this same coroutine and
+            // after the same staleness check, so a switch mid-read cannot publish the wrong language's
+            // engine, and so the first keystroke does not pay for reading it.
+            pinyinEngine = if (requested == KeyboardLanguages.CHINESE) {
+                withContext(Dispatchers.IO) { PinyinEngine.load(applicationContext) }
+            } else {
+                null
+            }
             if (lexicon != null) {
                 gestureDecoder = decoder
                 typingSuggester = TypingSuggester(
@@ -2097,6 +2127,9 @@ class SlideInputMethodService :
             StripMode.Gesture -> pickGestureAlternative(index, word)
             StripMode.Typing -> pickTypedSuggestion(word)
             StripMode.Prediction -> commitPrediction(word)
+            // The tapped word is the one the user picked, which is the whole reason a strip of
+            // candidates is tappable rather than only readable.
+            StripMode.Chinese -> commitPinyin(currentInputConnection, word)
             StripMode.GesturePreview, StripMode.Empty -> Unit
         }
     }
@@ -3132,6 +3165,80 @@ class SlideInputMethodService :
         if (shiftState() == ShiftState.SHIFTED) setShift(ShiftState.OFF)
     }
 
+    // region Mandarin
+
+    /**
+     * Types one pinyin letter.
+     *
+     * The letters go into the editor as composing text, which is what every Chinese input method on
+     * this phone does: the romanisation is visible while the word is being chosen, and it is one
+     * region, so taking a candidate replaces it whole rather than deleting characters one at a time
+     * and hoping the app cooperates.
+     */
+    private fun typePinyin(connection: InputConnection, text: String): Boolean {
+        if (!pinyinTyping.append(text)) return false
+        if (!showPinyinCandidates(connection)) {
+            // The editor refused the composing region outright. Nothing can be offered as a word if
+            // the letters are not a region the keyboard can replace, so the romanisation is dropped
+            // and the character is left to the ordinary path.
+            pinyinTyping.clear()
+            return false
+        }
+        return true
+    }
+
+    /** Puts the letters in the editor and the words they could become on the strip. */
+    private fun showPinyinCandidates(connection: InputConnection): Boolean {
+        if (!connection.setComposingText(pinyinTyping.composing, 1)) return false
+        suggestionStrip?.setSuggestions(pinyinCandidates())
+        stripMode = StripMode.Chinese
+        return true
+    }
+
+    /** The words the current romanisation could be, best first. Empty when there is no engine. */
+    private fun pinyinCandidates(): List<StripSuggestion> {
+        val engine = pinyinEngine ?: return emptyList()
+        if (!pinyinTyping.isActive) return emptyList()
+        // Eight is the engine's own default, and a strip's worth: past that the words are off the
+        // edge of the screen and the reader is scrolling a suggestion bar instead of typing.
+        return engine.candidates(pinyinTyping.composing.toString())
+            .map { StripSuggestion(it, isCorrection = false) }
+    }
+
+    /**
+     * Takes a word, replacing the romanisation with it.
+     *
+     * A null [word] takes the best candidate, which is what a space or an enter means when the user
+     * has not pointed at anything. When there is no candidate at all, the letters are settled as
+     * typed rather than deleted: the user can see what they typed and can backspace it, which is a
+     * better outcome than the word vanishing because the table had nothing to offer.
+     */
+    private fun commitPinyin(connection: InputConnection?, word: String? = null): Boolean {
+        val target = connection ?: return false
+        val chosen = word ?: pinyinCandidates().firstOrNull()?.word
+        if (chosen != null) {
+            target.setComposingText(chosen, 1)
+        }
+        target.finishComposingText()
+        pinyinTyping.clear()
+        clearSuggestions()
+        return true
+    }
+
+    /** Removes the last letter of the romanisation, or ends it when there is nothing left. */
+    private fun backspacePinyin(connection: InputConnection): Boolean {
+        if (!pinyinTyping.backspace()) return false
+        if (!pinyinTyping.isActive) {
+            connection.finishComposingText()
+            clearSuggestions()
+            return true
+        }
+        showPinyinCandidates(connection)
+        return true
+    }
+
+    // endregion
+
     private fun handleCharacter(
         connection: InputConnection,
         text: String,
@@ -3140,6 +3247,16 @@ class SlideInputMethodService :
         /** The last swipe's committed word when the cursor still rests at its end, else null. */
         swipedWordBehindCursor: String? = null,
     ): Boolean {
+        // Mandarin answers the same keystroke differently, so it is asked first and answers by
+        // returning. Everything below is the Latin path: a word grown one letter at a time for a
+        // lexicon to suggest from, which is not what a romanisation is. A character that is not a
+        // letter still belongs to the editor, so once the word on offer has been taken the keystroke
+        // falls through to land normally.
+        if (language == KeyboardLanguages.CHINESE) {
+            if (pinyinTyping.accepts(text)) return typePinyin(connection, text)
+            if (pinyinTyping.isActive) commitPinyin(connection)
+        }
+
         var callbackPossible = false
         // Typing with the cursor parked in the middle of a reopened word: the region can only grow
         // at its end, so settling it first is the only way the letter lands where the user is
@@ -3293,6 +3410,11 @@ class SlideInputMethodService :
             Character.getType(codePoint) in COMBINING_MARK_TYPES
 
     private fun handleSpace(connection: InputConnection, text: String, pressedAtMs: Long): Boolean {
+        // Space is how a pinyin candidate is taken, and it is the whole word rather than a space
+        // after it. That is the convention on every Chinese input method this keyboard is measured
+        // against, and inserting a space as well would put one between every word he types.
+        if (pinyinTyping.isActive) return commitPinyin(connection)
+
         // Settling composition can report unchanged selection before the separator moves it.
         // Deliver one net callback so the first report cannot consume the one-shot selfEdit
         // marker and make our own space look like an external cursor move.
@@ -3359,6 +3481,11 @@ class SlideInputMethodService :
     }
 
     private fun handleDelete(connection: InputConnection): Boolean {
+        // While a romanisation is in progress the only thing backspace can sensibly remove is its
+        // last letter: the letters are in the editor as composing text, and deleting past them
+        // would reach into the sentence behind the word being typed.
+        if (pinyinTyping.isActive) return backspacePinyin(connection)
+
         if (deleteLastGestureCommit(connection)) return true
         val revert = revertAutocorrect(connection)
         if (revert.consumed) return revert.callbackPossible
@@ -3578,6 +3705,10 @@ class SlideInputMethodService :
         )
 
     private fun handleEnter(connection: InputConnection): Boolean {
+        // The word is committed before the newline, or the romanisation itself would be settled as
+        // Latin text and the user would watch "nihao" appear where they asked for 你好.
+        if (pinyinTyping.isActive) commitPinyin(connection)
+
         val finish = finishComposing(connection)
         if (!finish.settled) return finish.callbackPossible
         val info = currentInputEditorInfo
@@ -4418,6 +4549,10 @@ class SlideInputMethodService :
      * confident to say, because three guessed words cost a glance every time they appear.
      */
     private fun updatePredictions() {
+        // The candidate strip belongs to the romanisation until the word is taken. A prediction
+        // computed from the sentence behind it would replace the Chinese words the user is choosing
+        // between with English ones they cannot use.
+        if (pinyinTyping.isActive) return
         if (composing.isNotEmpty()) return
         if (!fieldSuggestionsEnabled()) return
         if (anyPanelShown) return
@@ -4682,7 +4817,7 @@ class SlideInputMethodService :
     )
 
     /** What the suggestion strip is showing, and so what a tap on it should do. */
-    private enum class StripMode { Empty, GesturePreview, Gesture, Typing, Prediction }
+    private enum class StripMode { Empty, GesturePreview, Gesture, Typing, Prediction, Chinese }
 
     // endregion
 

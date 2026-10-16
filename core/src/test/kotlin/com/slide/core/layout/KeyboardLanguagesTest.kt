@@ -30,19 +30,39 @@ class KeyboardLanguagesTest {
     }
 
     @Test
+    fun `chinese subtypes resolve to chinese`() {
+        for (tag in listOf("zh_CN", "zh-CN", "zh", "zh_Hans", "zh_CN_#Hans", "ZH_cn")) {
+            assertEquals(tag, KeyboardLanguages.CHINESE, KeyboardLanguages.resolve(tag))
+        }
+    }
+
+    @Test
     fun `anything unknown or unsupported falls back to english`() {
-        for (tag in listOf(null, "", "   ", "fr_FR", "de", "zh_CN", "ja", "und", "-", "espa", "e")) {
+        for (tag in listOf(null, "", "   ", "fr_FR", "de", "ja", "und", "-", "espa", "e")) {
             assertEquals("$tag", KeyboardLanguages.FALLBACK, KeyboardLanguages.resolve(tag))
         }
     }
 
     @Test
-    fun `only english and spanish are supported`() {
-        assertEquals(setOf("en", "es"), KeyboardLanguages.SUPPORTED)
+    fun `english, spanish and chinese are supported`() {
+        assertEquals(setOf("en", "es", "zh"), KeyboardLanguages.SUPPORTED)
         assertTrue(KeyboardLanguages.isSupported("en"))
         assertTrue(KeyboardLanguages.isSupported("es"))
+        assertTrue(KeyboardLanguages.isSupported("zh"))
         assertFalse(KeyboardLanguages.isSupported("fr"))
         assertFalse(KeyboardLanguages.isSupported(""))
+    }
+
+    @Test
+    fun `the globe key can reach every language, in order, and come back`() {
+        val walked = generateSequence(KeyboardLanguages.SWITCHABLE.first()) {
+            KeyboardLanguages.next(it.language)
+        }.take(KeyboardLanguages.SWITCHABLE.size).map { it.language }.toList()
+        assertEquals(KeyboardLanguages.SWITCHABLE.map { it.language }, walked)
+        assertEquals(
+            KeyboardLanguages.SWITCHABLE.first(),
+            KeyboardLanguages.next(KeyboardLanguages.SWITCHABLE.last().language),
+        )
     }
 
     @Test
