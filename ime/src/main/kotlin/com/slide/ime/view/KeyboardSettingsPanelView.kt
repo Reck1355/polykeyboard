@@ -185,9 +185,9 @@ class KeyboardSettingsPanelView(context: Context) : LinearLayout(context) {
         ) { value, chosen -> value.copy(soundVolume = chosen) }
 
         addSection(body, ClassicKeyboard.GROUP_TITLE)
-        // The controls stay enabled and the note explains them, rather than the other way round:
-        // a disabled view is a view assistive technology cannot reach, and the value it holds is
-        // still the one the classic board reads.
+        // The control stays enabled and the note explains it, rather than the other way round: a
+        // disabled view is a view assistive technology cannot reach, and the value it holds is still
+        // the one the classic board reads.
         if (!ClassicKeyboard.controlsApply()) {
             addNote(body, ClassicKeyboard.HEX_BOARD_REASON)
         }

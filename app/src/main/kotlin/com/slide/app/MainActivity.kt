@@ -486,11 +486,13 @@ private fun SetupScreen(repository: SettingsRepository) {
                     // one stored choice — and asks the board's own geometry for its shape, so what
                     // is shown is the board the keyboard will draw, not a picture of one.
                     KeyboardSizePreview(step = keyboardSizeStep, colours = boardColours)
-                    // The stock keyboard's two controls, in a group of their own and saying why they
-                    // are off. They used to sit above "Keyboard size" with nothing to distinguish
-                    // them, so the height slider looked broken when it was only inapplicable: the
-                    // hex board takes its height from the ladder above and its digits from ?123.
-                    // Nothing is removed, so the group is a label rather than a loss.
+                    // The one stock control the hex board cannot answer sits under a heading that
+                    // says so: the honeycomb has no number row, so its digits live behind ?123, and
+                    // until this heading existed the control sat beside the ones that do work with
+                    // nothing to distinguish it. Nothing is removed, so the group is a label rather
+                    // than a loss. "Keyboard height" has left the group: a hexagon has no row to
+                    // stretch, but the board still has a size, so that slider now scales the
+                    // honeycomb and works on both boards.
                     Text(
                         ClassicKeyboard.GROUP_TITLE,
                         style = MaterialTheme.typography.titleSmall,

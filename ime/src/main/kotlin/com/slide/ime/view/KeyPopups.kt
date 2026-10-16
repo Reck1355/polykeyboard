@@ -40,14 +40,14 @@ class KeyPreviewPopup(private val anchor: View) {
         elevation = 8 * density
     }
 
-    fun show(theme: KeyboardTheme, text: String, key: PlacedKey) {
+    internal fun show(colours: KeyPopupColours, text: String, key: PlacedKey) {
         label.text = text
-        label.setTextColor(theme.popupText)
+        label.setTextColor(colours.text)
         label.textSize = 28f
-        background.setColor(theme.popupBackground)
+        background.setColor(colours.background)
         // Elevation alone vanishes on dark themes, where the popup and the keys share a surface
         // colour; the same hairline the keycaps use keeps the popup's edge legible everywhere.
-        background.setStroke(density.roundToInt().coerceAtLeast(1), theme.keyBorder)
+        background.setStroke(density.roundToInt().coerceAtLeast(1), colours.border)
 
         label.measure(View.MeasureSpec.UNSPECIFIED, View.MeasureSpec.UNSPECIFIED)
         val popupWidth = maxOf(label.measuredWidth, (key.width * 1.18f).roundToInt())

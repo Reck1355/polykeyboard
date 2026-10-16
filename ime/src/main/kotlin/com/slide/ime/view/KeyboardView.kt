@@ -516,9 +516,13 @@ class KeyboardView @JvmOverloads constructor(
         val width = MeasureSpec.getSize(widthMeasureSpec)
         val header = if (searchMode) searchHeaderHeight() else 0f
         val height = if (hexBoard) {
-            // The board's natural height is `3.25 x ratio` cell widths: the number row is off, the
-            // key-height setting does not apply to a shape whose proportion is fixed. Two things
-            // bound it. The board may take no more of the display than
+            // The board's natural height is `3.25 x ratio` cell widths, and the hexagon's
+            // proportion is fixed: there is no row height to stretch, so "Keyboard height" scales
+            // the whole board instead of any one row. The geometry still scales uniformly into the
+            // frame it is given, so a shorter frame is a smaller honeycomb at the same ratio — the
+            // same promise the size ladder keeps, moved by one more control. At the default scale of
+            // 1 nothing here moves, so the approved numbers are the approved numbers.
+            // Two things bound it. The board may take no more of the display than
             // HexBoard.LANDSCAPE_HEIGHT_FRACTION of its height; without that cap a wide landscape
             // screen lets the width alone decide a 240 px cell and a 900 px block that fills the
             // width with no side bands, which is not the board that was approved. The cap turns that
@@ -532,7 +536,10 @@ class KeyboardView @JvmOverloads constructor(
             // a bigger step is a taller portrait block or a larger landscape share, and this is the
             // one place the keyboard's own height is measured from it.
             val natural = topPadding + header +
-                HexBoard.cappedBoardHeight(width.toFloat(), displayHeight(), hexSizing()) +
+                HexBoard.scaledBoardHeight(
+                    HexBoard.cappedBoardHeight(width.toFloat(), displayHeight(), hexSizing()),
+                    settings.keyHeightScale,
+                ) +
                 bottomInset()
             if (MeasureSpec.getMode(heightMeasureSpec) == MeasureSpec.UNSPECIFIED) {
                 natural
@@ -851,7 +858,7 @@ class KeyboardView @JvmOverloads constructor(
         val shoulderHalfHeight = halfHeight * HexKeyMetrics.SHOULDER_HEIGHT_FRACTION
 
         fillPaint.color = fill
-        hexStrokePaint.color = hexPalette.background
+        hexStrokePaint.color = HexKeyStyle.edgeColour(settings.showKeyBorders, hexPalette)
         hexStrokePaint.strokeWidth = hexEdgeWidth
         for (cell in 0 until cells) {
             val path = hexPathFor(capAt(placed, cell, cellWidth, halfWidth, halfHeight, shoulderHalfHeight))
@@ -1590,7 +1597,7 @@ class KeyboardView @JvmOverloads constructor(
             return
         }
         previewPointerId = pointerId
-        previewPopup.show(keyboardTheme, displayLabel(placed.key), placed)
+        previewPopup.show(KeyPopupStyle.coloursFor(hexBoard, hexPalette, keyboardTheme), displayLabel(placed.key), placed)
     }
 
     /** Hides the one shared preview window, but only on behalf of the finger showing in it. */
@@ -2030,6 +2037,49 @@ internal object SearchHeaderRouting {
     /** True when a lift — ACTION_UP or ACTION_POINTER_UP alike — resolves the header press. */
     fun resolvesOnLift(headerOwner: Int?, pointerId: Int): Boolean =
         headerOwner != null && headerOwner == pointerId
+}
+
+/**
+ * The honeycomb's edge policy, kept out of the Canvas work so the border setting cannot go quiet
+ * again.
+ *
+ * With "Key borders" off the stroke is the background colour, which is what draws the honeycomb's
+ * seams: neighbouring caps read as separate hexagons from the gap between them, not from an outline.
+ * With it on the stroke is the palette's own label colour. The theme's key-border hairline is the
+ * wrong tool here — it is a 10%-alpha line sized for the classic board's rounded rectangles, and on
+ * a jade hexagon it is invisible, which is how a live setting came to look like a dead one.
+ */
+internal object HexKeyStyle {
+    fun edgeColour(bordersOn: Boolean, palette: HexPalette): Int =
+        if (bordersOn) palette.label else palette.background
+}
+
+/** The three colours one press preview is drawn in. */
+internal data class KeyPopupColours(val background: Int, val text: Int, val border: Int)
+
+/**
+ * Which colours the press preview wears, per board.
+ *
+ * The preview itself is board-agnostic — one window serves both — but it was handed the classic
+ * theme's colours on the honeycomb, where they sit so close to the board's own jade that the popup
+ * read as absent. The hex version comes from [HexPalette] and keeps the board's background as its
+ * stroke, so the popup has an edge on a dark screen instead of relying on elevation alone.
+ */
+internal object KeyPopupStyle {
+    fun coloursFor(hexBoard: Boolean, palette: HexPalette, theme: KeyboardTheme): KeyPopupColours =
+        if (hexBoard) {
+            KeyPopupColours(
+                background = palette.specialKey,
+                text = palette.label,
+                border = palette.background,
+            )
+        } else {
+            KeyPopupColours(
+                background = theme.popupBackground,
+                text = theme.popupText,
+                border = theme.keyBorder,
+            )
+        }
 }
 
 /** Visual keycap policy separated from Canvas work so theme settings cannot regress silently. */

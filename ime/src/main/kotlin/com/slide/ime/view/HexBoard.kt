@@ -407,6 +407,21 @@ object HexBoard {
         min(boardHeight(viewWidth, sizing), heightCap(displayHeight, sizing))
 
     /**
+     * The capped height, moved by the "Keyboard height" setting.
+     *
+     * A hexagon has one proportion and no row to stretch, so the only thing a height control can do
+     * to this board is resize it: the frame it is measured into gets taller or shorter and
+     * [place] scales the whole honeycomb into that frame at the ratio the orientation calls for. The
+     * setting is therefore a scale, not a row height, and the shape is never the thing that moves.
+     *
+     * At the default of 1 this is the capped height unchanged, which is what keeps every approved
+     * number the approved number: the landscape cap, the 157.4 px cell, the two five-cell halves and
+     * the channel between them all come from [cappedBoardHeight] alone, and the scale is 1 until the
+     * user moves a control that until now did nothing at all.
+     */
+    fun scaledBoardHeight(cappedHeight: Float, scale: Float): Float = cappedHeight * scale
+
+    /**
      * The largest uniform cell width that fits the board in a viewport of [viewportWidth] x
      * [availableHeight], at [sizing].
      *
