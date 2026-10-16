@@ -97,12 +97,15 @@ EXPECTED_NATIVE_PATHS=(
 )
 EXPECTED_RUNTIME_DATA_PATHS=(
     assets/bigrams_en.bin
+    assets/bigrams_es.bin
     assets/emoji.bin
     assets/ggml-small.en-q5_1.bin
     assets/lexicon_en.bin
+    assets/lexicon_es.bin
     assets/swipe/decoder.pte
     assets/swipe/encoder.pte
     assets/trigrams_en.bin
+    assets/trigrams_es.bin
 )
 ARM64_CPU_VARIANTS=(
     libggml-cpu-android_armv8.0_1.so
