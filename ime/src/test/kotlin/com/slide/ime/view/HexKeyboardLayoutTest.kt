@@ -4,6 +4,8 @@ import com.slide.core.layout.KeyType
 import com.slide.core.layout.Layouts
 import com.slide.core.theme.HexPalette
 import kotlin.math.sqrt
+import org.junit.Assert.assertNotEquals
+import org.junit.Assert.assertNotSame
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertSame
@@ -634,8 +636,13 @@ class HexKeyboardLayoutTest {
         assertFalse(Layouts.SymbolsEn.hexKeys)
         assertFalse(Layouts.EmailEn.hexKeys)
 
-        // The hex board does not take the digit row, and QWERTY's own geometry does not move.
-        assertSame(Layouts.HexQwertyEn, Layouts.withNumberRow(Layouts.HexQwertyEn, true))
+        // The hex board takes the honeycomb's own digit row, never the rectangle's: ten squat columns
+        // would break the pattern the board is built on. QWERTY's own geometry does not move either way.
+        val hexRow = Layouts.withNumberRow(Layouts.HexQwertyEn, true)
+        assertNotSame(Layouts.HexQwertyEn, hexRow)
+        assertEquals(Layouts.hexNumberRow, hexRow.rows.first())
+        assertNotEquals(Layouts.numberRow, hexRow.rows.first())
+        assertSame(Layouts.numberRow, Layouts.withNumberRow(Layouts.QwertyEn, true).rows.first())
         assertEquals(10, Layouts.QwertyEn.rows[0].keys.size)
         assertEquals(6, Layouts.QwertyEn.rows[3].keys.size)
     }

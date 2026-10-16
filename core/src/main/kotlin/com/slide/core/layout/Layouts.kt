@@ -45,6 +45,25 @@ object Layouts {
         heightWeight = 0.8f,
     )
 
+    /**
+     * The same ten digits in the honeycomb's own shape.
+     *
+     * The stock row above is a rectangle grid's row: ten equal columns, no stagger, and squeezed to
+     * eight tenths of a row's height because a rectangle board can afford a shorter row. On the honeycomb
+     * none of that fits. Every key there is one regular hexagon, so the row carries no height squeeze or
+     * ten squat keys appear along the top; and it is offset by half a cell so it interleaves with the
+     * ten keys of the a-row below it, exactly as those interleave with the s-row. Sitting directly above
+     * them instead, every digit would straddle two letters and the board's own pattern would break at the
+     * first row.
+     */
+    val hexNumberRow = KeyRow(
+        listOf("1", "2", "3", "4", "5", "6", "7", "8", "9", "0").map {
+            Key(it, KeyType.CHARACTER, gestureEligible = false)
+        },
+        HEX_ROW_OFFSET,
+        HEX_ROW_OFFSET,
+    )
+
     val QwertyEn = KeyboardLayout(
         id = "qwerty_en",
         label = "English (US)",
@@ -235,7 +254,7 @@ object Layouts {
      */
     val HexQwertyEn = QwertyEn.copy(
         id = ID_HEX_QWERTY,
-        supportsNumberRow = false,
+        supportsNumberRow = true,
         hexKeys = true,
         rows = listOf(
             KeyRow(QwertyEn.rows[0].keys.map { it.copy(hint = null) }),
@@ -276,7 +295,7 @@ object Layouts {
      */
     val HexQwertyEs = QwertyEs.copy(
         id = ID_HEX_QWERTY_ES,
-        supportsNumberRow = false,
+        supportsNumberRow = true,
         hexKeys = true,
         rows = listOf(
             KeyRow(QwertyEs.rows[0].keys.map { it.copy(hint = null) }),
@@ -690,13 +709,22 @@ object Layouts {
     private fun sym(s: String, alternates: String = "") =
         Key(s, KeyType.CHARACTER, alternates = alternates.map(Char::toString), gestureEligible = false)
 
-    /** Inserts the digit row at the top when the setting is enabled. */
-    fun withNumberRow(layout: KeyboardLayout, enabled: Boolean): KeyboardLayout =
-        if (!enabled || !layout.supportsNumberRow || layout.rows.firstOrNull() == numberRow) {
+    /**
+     * Inserts the digit row at the top when the setting is enabled.
+     *
+     * Which of the two rows is inserted is decided by the board, not by the setting: a honeycomb needs
+     * [hexNumberRow] for the reasons written on it, and a rectangular board needs [numberRow]. Asking the
+     * board rather than the caller keeps one answer to the question and means a board cannot be handed the
+     * other shape's row by mistake.
+     */
+    fun withNumberRow(layout: KeyboardLayout, enabled: Boolean): KeyboardLayout {
+        val row = if (layout.hexKeys) hexNumberRow else numberRow
+        return if (!enabled || !layout.supportsNumberRow || layout.rows.firstOrNull() == row) {
             layout
         } else {
-            layout.copy(rows = listOf(numberRow) + layout.rows)
+            layout.copy(rows = listOf(row) + layout.rows)
         }
+    }
 
     /**
      * Every board one language needs, in the shape the input method asks for them.

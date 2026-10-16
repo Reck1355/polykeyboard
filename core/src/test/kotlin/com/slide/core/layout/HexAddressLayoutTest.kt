@@ -52,7 +52,10 @@ class HexAddressLayoutTest {
         for (board in englishAddress + spanishAddress) {
             val counts = board.rows.map { it.keys.size }
             assertEquals("${board.id}: four rows of 10 / 9 / 9 / 7", listOf(10, 9, 9, 7), counts)
-            assertTrue("${board.id}: the address board carries no number row", !board.supportsNumberRow)
+            // The board as authored is four rows. A digit row is added on top by the setting, not baked
+            // in, and these boards now accept one: a number row over an email address is worth having, and
+            // the honeycomb's own row is what arrives.
+            assertTrue("${board.id}: accepts a digit row", board.supportsNumberRow)
             val spaces = board.rows.flatMap { it.keys }.filter { it.type == KeyType.SPACE }
             assertEquals("${board.id}: one space bar", 1, spaces.size)
             assertEquals("${board.id}: over three cells", 3f, spaces.single().widthWeight, 0f)

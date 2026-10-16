@@ -1,5 +1,6 @@
 package com.slide.core.layout
 
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertSame
@@ -7,6 +8,40 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class LayoutsTest {
+
+    @Test
+    fun `the honeycomb digit row interleaves, and Chinese gets it too`() {
+        // The digit row has to belong to the board it lands on. A rectangle board's row is ten equal
+        // columns squeezed to eight tenths of a row; on the honeycomb every key is one regular hexagon and
+        // the row interlocks with the a-row below it by half a cell. Asserted on the board the view
+        // actually draws, with the language resolved first, so a row that is correct on English and
+        // missing on Chinese cannot pass.
+        for (language in listOf(KeyboardLanguages.FALLBACK, KeyboardLanguages.CHINESE)) {
+            val boards = Layouts.boardsFor(language)
+            val withRow = Layouts.withNumberRow(boards.hex, true)
+
+            assertEquals("$language gained a row", boards.hex.rows.size + 1, withRow.rows.size)
+            val row = withRow.rows.first()
+            assertEquals("$language digits are ten", 10, row.keys.size)
+            assertTrue(
+                "$language digits are one hexagon each",
+                row.keys.all { it.widthWeight == 1f },
+            )
+            assertEquals("$language digits are not squeezed", 1f, row.heightWeight)
+            assertNotEquals(
+                "$language digit row sits on the letters below it",
+                boards.hex.rows.first().leadingGap,
+                row.leadingGap,
+            )
+            assertEquals("$language gets the honeycomb row", Layouts.hexNumberRow, row)
+            assertFalse(
+                "$language digits still do not want glide",
+                row.keys.any { it.gestureEligible },
+            )
+        }
+        // The symbols boards ARE the digits, so they must not be handed a second row of them.
+        assertSame(Layouts.HexSymbolsEn, Layouts.withNumberRow(Layouts.HexSymbolsEn, true))
+    }
 
     @Test
     fun `every board names its own language on the space bar`() {

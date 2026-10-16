@@ -12,6 +12,14 @@ android {
     compileSdk = 37
 
     defaultConfig {
+        ndk {
+            // The keyboard is built for the phone it is for, so it carries only the instruction sets that
+            // phone or an older one can actually run. Measured on the shipped build: the x86 and x86_64
+            // copies of every native library were 17.5 MB of a 251 MiB download, all of it so the keyboard
+            // could also run in an emulator, which is not where typing happens. arm64-v8a is the phone;
+            // armeabi-v7a is kept for a device older than it and costs 2.3 MB, which is not worth the doubt.
+            abiFilters += listOf("arm64-v8a", "armeabi-v7a")
+        }
         applicationId = "com.slide"
         minSdk = 26
         targetSdk = 37
