@@ -1,9 +1,11 @@
 name: Release APK
 
 on:
-  push:
-    tags:
-      - "v*.*.*"
+  # Manual only. This workflow is inherited from Slide: it builds `dist/Slide-<version>.apk` and
+  # signs it with Slide's own release secrets, which a fork does not have. While it still fired on
+  # `v*.*.*` any version tag would have set it running on a repo with none of those secrets and
+  # failed in public, so releases are cut by hand and this file is kept for reference only.
+  workflow_dispatch:
 
 permissions:
   contents: read
