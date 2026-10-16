@@ -61,6 +61,10 @@ verify_elf_abi() {
     fi
 }
 
+# The build ships only the instruction sets the phone can run. x86 and x86_64 were 17.5 MB of a
+# 251 MiB download purely so the keyboard could also run in an emulator, so defaultConfig filters to
+# arm64-v8a (the phone) and armeabi-v7a (an older one, 2.3 MB). If an x86 copy ever reappears in an
+# artifact it is an unintended packaging change, which is what this manifest is here to catch.
 EXPECTED_NATIVE_PATHS=(
     lib/arm64-v8a/libandroidx.graphics.path.so
     lib/arm64-v8a/libc++_shared.so
@@ -83,17 +87,6 @@ EXPECTED_NATIVE_PATHS=(
     lib/armeabi-v7a/libdatastore_shared_counter.so
     lib/armeabi-v7a/libfbjni.so
     lib/armeabi-v7a/libslide_asr.so
-    lib/x86/libandroidx.graphics.path.so
-    lib/x86/libc++_shared.so
-    lib/x86/libdatastore_shared_counter.so
-    lib/x86/libfbjni.so
-    lib/x86/libslide_asr.so
-    lib/x86_64/libandroidx.graphics.path.so
-    lib/x86_64/libc++_shared.so
-    lib/x86_64/libdatastore_shared_counter.so
-    lib/x86_64/libexecutorch.so
-    lib/x86_64/libfbjni.so
-    lib/x86_64/libslide_asr.so
 )
 EXPECTED_RUNTIME_DATA_PATHS=(
     assets/THIRD_PARTY_NOTICES.txt
@@ -197,8 +190,10 @@ TRIGRAM_SHA256="dd85903183a89ddd957978636e5366e1e11e2aed14ef5d8c9b13abea48dcb3e1
 NOTICES_SHA256="024ccd7102435af2e555af561603e1a3174361cea6d9ab53ba35cc1df02865c6"
 SWIPE_LICENSE_SHA256="325a6991d53c8d9a1c70256234ba7a3f672783c65057bc2903fe29e54f212c4b"
 WHISPER_COMMIT="592feef04a1802b18cbeffd0fd0eb5d02570c2ec"
-EXPECTED_ABIS=(arm64-v8a armeabi-v7a x86 x86_64)
-EXECUTORCH_ABIS=(arm64-v8a x86_64)
+EXPECTED_ABIS=(arm64-v8a armeabi-v7a)
+# ExecuTorch publishes no 32-bit build, so this was arm64-v8a and x86_64. x86_64 is gone from the
+# artifact with the rest of the emulator-only instruction sets; arm64 is what the phone runs.
+EXECUTORCH_ABIS=(arm64-v8a)
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 TEMP_DIR="$(mktemp -d)"
 trap 'rm -rf "$TEMP_DIR"' EXIT
