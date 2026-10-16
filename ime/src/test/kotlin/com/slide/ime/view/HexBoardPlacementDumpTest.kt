@@ -1,6 +1,7 @@
 package com.slide.ime.view
 
 import com.slide.core.layout.KeyType
+import com.slide.core.layout.KeyboardLayout
 import com.slide.core.layout.Layouts
 import com.slide.core.settings.KeyboardSize
 import java.io.File
@@ -29,10 +30,25 @@ import org.junit.Test
 class HexBoardPlacementDumpTest {
 
     /** One screen the keyboard is drawn on, and the height the view hands the board. */
-    private data class Screen(val name: String, val orientation: HexBoard.Orientation, val width: Float, val available: Float)
+    private data class Screen(
+        val name: String,
+        val orientation: HexBoard.Orientation,
+        val width: Float,
+        val available: Float,
+        val layout: KeyboardLayout = Layouts.HexQwertyEn,
+    )
 
     private val portrait = Screen("portrait", HexBoard.Orientation.PORTRAIT, 1080f, 2000f)
     private val landscape = Screen("landscape", HexBoard.Orientation.LANDSCAPE, 2400f, 0f)
+
+    /**
+     * The two boards a browser's address bar and an email field ask for, on portrait's own screen.
+     *
+     * They exist because those modes used to drop to the stock keyboard's rectangles; the picture is
+     * the check that they are the same honeycomb with a delimiter in it, not a lookalike.
+     */
+    private val portraitEmail = portrait.copy(name = "portrait-email", layout = Layouts.HexEmailEn)
+    private val portraitUri = portrait.copy(name = "portrait-uri", layout = Layouts.HexUriEn)
 
     /**
      * What the view hands the board in landscape: the display is 1080 px tall and the board may take
@@ -47,7 +63,7 @@ class HexBoardPlacementDumpTest {
     }
 
     private fun place(screen: Screen, step: Int) = HexBoard.place(
-        layout = Layouts.HexQwertyEn,
+        layout = screen.layout,
         viewportWidth = screen.width,
         availableHeight = available(screen, step),
         sizing = HexBoard.sizing(screen.orientation, step),
@@ -92,6 +108,9 @@ class HexBoardPlacementDumpTest {
             cases += portrait to step
             cases += landscape to step
         }
+        // The address boards once each at the default step: enough to draw them beside portrait.
+        cases += portraitEmail to KeyboardSize.DEFAULT_STEP
+        cases += portraitUri to KeyboardSize.DEFAULT_STEP
         cases.forEachIndexed { index, (screen, step) ->
             val placement = place(screen, step)
             out.append("  {\"screen\":\"${screen.name}\",\"step\":$step,")
@@ -118,6 +137,30 @@ class HexBoardPlacementDumpTest {
         file.parentFile?.mkdirs()
         file.writeText(out.toString())
         assertTrue("the fixture was written", file.length() > 1000L)
+    }
+
+    @Test
+    fun `the address boards place on the same ten columns, delimiter and all`() {
+        for (screen in listOf(portraitEmail, portraitUri)) {
+            val placement = place(screen, KeyboardSize.DEFAULT_STEP)
+            assertEquals(
+                "${screen.name}: ten columns",
+                10f * placement.cellWidth,
+                placement.boardWidth,
+                0.01f,
+            )
+            assertEquals("${screen.name}: four rows", 4, placement.keys.map { it.row }.distinct().size)
+            assertEquals(
+                "${screen.name}: one space key, over three cells",
+                1,
+                placement.keys.count { it.key.type == KeyType.SPACE },
+            )
+            assertNull("${screen.name}: one board, no channel", placement.channel)
+            assertTrue(
+                "${screen.name}: the delimiter is on the bottom row",
+                placement.keys.any { it.row == 3 && it.key.outputText in setOf("@", "/") },
+            )
+        }
     }
 
     @Test
