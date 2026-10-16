@@ -228,13 +228,13 @@ object HexBoard {
      * share of the display height *is* the cap and the cell follows from it — so nothing there can
      * overrun and there is nothing to clamp.
      */
-    fun fittedSizing(sizing: Sizing, viewportWidth: Float, availableHeight: Float): Sizing {
+    fun fittedSizing(sizing: Sizing, viewportWidth: Float, availableHeight: Float, rows: Int = ROWS): Sizing {
         if (sizing.split) return sizing
         if (viewportWidth <= 0f || !viewportWidth.isFinite()) return sizing
         if (availableHeight <= 0f || !availableHeight.isFinite()) return sizing
         val cellWidth = viewportWidth / widthInCells(sizing)
         if (cellWidth <= 0f) return sizing
-        val fittingRatio = availableHeight / (BLOCK_CAP_FACTOR * cellWidth)
+        val fittingRatio = availableHeight / (blockCapFactor(rows) * cellWidth)
         if (fittingRatio >= sizing.heightRatio) return sizing
         return sizing.copy(heightRatio = fittingRatio)
     }
@@ -366,20 +366,33 @@ object HexBoard {
      */
     fun topOverhang(cellHeight: Float): Float = (capHeight(cellHeight) - cellHeight) / 2f
 
-    /** The block's drawn height in cells at [sizing]: 3.25 x ratio, exactly. */
-    fun blockHeightInCells(sizing: Sizing): Float = BLOCK_CAP_FACTOR * sizing.heightRatio
+    /**
+     * The block's drawn height in cells at [sizing]: one cap plus a pitch for every row after the first.
+     *
+     * [BLOCK_CAP_FACTOR] is the four-row board's number and stays it — 3 x PITCH_CAP_FRACTION + 1, three
+     * pitches and a cap. Written as a count of rows it is the same value for four rows and the right one
+     * for any other, which matters because a board is not always four rows tall any more: the honeycomb
+     * takes a digit row, and a board placed into a box sized for the rows it does not have either
+     * overruns that box (the digit row was drawn a full row past the block, so landscape grew by one row)
+     * or squashes its keys to fit (portrait's letters came down from 121.5 px to 97.2).
+     */
+    /** The block's height in cells at ratio 1: one cap plus a pitch for every row after the first. */
+    fun blockCapFactor(rows: Int = ROWS): Float = (rows - 1) * PITCH_CAP_FRACTION + 1f
+
+    fun blockHeightInCells(sizing: Sizing, rows: Int = ROWS): Float =
+        blockCapFactor(rows) * sizing.heightRatio
 
     /** The drawn height of a block whose cell is [cellWidth], at [sizing]. */
-    fun blockHeight(cellWidth: Float, sizing: Sizing): Float =
-        cellWidth * blockHeightInCells(sizing)
+    fun blockHeight(cellWidth: Float, sizing: Sizing, rows: Int = ROWS): Float =
+        cellWidth * blockHeightInCells(sizing, rows)
 
     /** The drawn height of a block laid across a viewport [viewWidth] wide (three pitches + a cap). */
-    fun boardHeight(viewWidth: Float, sizing: Sizing): Float =
-        blockHeight(cellWidth(viewWidth), sizing)
+    fun boardHeight(viewWidth: Float, sizing: Sizing, rows: Int = ROWS): Float =
+        blockHeight(cellWidth(viewWidth), sizing, rows)
 
     /** Content height that puts the rows at their natural pitch: one cell per row. */
-    fun contentHeight(viewWidth: Float, sizing: Sizing): Float =
-        ROWS * cellHeight(cellWidth(viewWidth), sizing)
+    fun contentHeight(viewWidth: Float, sizing: Sizing, rows: Int = ROWS): Float =
+        rows * cellHeight(cellWidth(viewWidth), sizing)
 
     /**
      * The tallest the board may be drawn on a display [displayHeight] px tall, at [sizing].
@@ -403,8 +416,8 @@ object HexBoard {
      * from that height in [place], so the 129.5 px landscape cell is derived rather than stated, and
      * in portrait the natural block comes back unchanged because portrait is uncapped.
      */
-    fun cappedBoardHeight(viewWidth: Float, displayHeight: Float, sizing: Sizing): Float =
-        min(boardHeight(viewWidth, sizing), heightCap(displayHeight, sizing))
+    fun cappedBoardHeight(viewWidth: Float, displayHeight: Float, sizing: Sizing, rows: Int = ROWS): Float =
+        min(boardHeight(viewWidth, sizing, rows), heightCap(displayHeight, sizing))
 
     /**
      * The capped height, moved by the "Keyboard height" setting.
@@ -435,11 +448,11 @@ object HexBoard {
      * than the ten columns, because its outer offset rows keep their half-cell phase from their own
      * edge, so the halves cannot overlap on a narrow screen.
      */
-    fun cellWidthFor(viewportWidth: Float, availableHeight: Float, sizing: Sizing): Float {
+    fun cellWidthFor(viewportWidth: Float, availableHeight: Float, sizing: Sizing, rows: Int = ROWS): Float {
         if (viewportWidth <= 0f || !viewportWidth.isFinite()) return 0f
         val byWidth = viewportWidth / widthInCells(sizing)
         if (availableHeight <= 0f || !availableHeight.isFinite()) return byWidth
-        return min(byWidth, availableHeight / blockHeightInCells(sizing))
+        return min(byWidth, availableHeight / blockHeightInCells(sizing, rows))
     }
 
     /**
@@ -453,8 +466,8 @@ object HexBoard {
         if (sizing.split) SPLIT_WIDTH_IN_CELLS else COLUMNS.toFloat()
 
     /** True when the frame is too short for the width-derived cell, so the height is what binds. */
-    fun heightBinds(viewportWidth: Float, availableHeight: Float, sizing: Sizing): Boolean =
-        cellWidthFor(viewportWidth, availableHeight, sizing) < viewportWidth / widthInCells(sizing)
+    fun heightBinds(viewportWidth: Float, availableHeight: Float, sizing: Sizing, rows: Int = ROWS): Boolean =
+        cellWidthFor(viewportWidth, availableHeight, sizing, rows) < viewportWidth / widthInCells(sizing)
 
     /** The board as it was placed: its metrics, and the keys themselves. */
     class HexPlacement(
@@ -504,16 +517,17 @@ object HexBoard {
         sizing: Sizing,
         topOffset: Float = 0f,
     ): HexPlacement {
-        val drawn = fittedSizing(sizing, viewportWidth, availableHeight)
+        val rows = layout.rows.size
+        val drawn = fittedSizing(sizing, viewportWidth, availableHeight, rows)
         if (drawn.split) return placeSplit(layout, viewportWidth, availableHeight, drawn, topOffset)
-        val cellWidth = cellWidthFor(viewportWidth, availableHeight, drawn)
+        val cellWidth = cellWidthFor(viewportWidth, availableHeight, drawn, rows)
         val boardWidth = cellWidth * COLUMNS
         val leftInset = ((viewportWidth - boardWidth) * 0.5f).coerceAtLeast(0f)
         val cellHeight = cellHeight(cellWidth, drawn)
         val placed = KeyGeometry.place(
             layout = layout,
             width = boardWidth,
-            contentHeight = ROWS * cellHeight,
+            contentHeight = rows * cellHeight,
             // The caps overhang their cells; reserving that here keeps the top row's points inside
             // the view instead of clipped against its edge.
             topOffset = topOffset + topOverhang(cellHeight),
@@ -523,7 +537,7 @@ object HexBoard {
             cellWidth = cellWidth,
             boardWidth = boardWidth,
             // The block is a fixed number of cells tall, so it scales with the cell exactly.
-            boardHeight = blockHeight(cellWidth, drawn),
+            boardHeight = blockHeight(cellWidth, drawn, rows),
             leftInset = leftInset,
             scale = if (naturalCell > 0f) cellWidth / naturalCell else 1f,
             sizing = drawn,
@@ -549,8 +563,9 @@ object HexBoard {
         sizing: Sizing,
         topOffset: Float,
     ): HexPlacement {
+        val rows = layout.rows.size
         val halves = splitHalves(layout)
-        val cellWidth = splitCellWidth(viewportWidth, availableHeight, sizing, halves.spanInCells)
+        val cellWidth = splitCellWidth(viewportWidth, availableHeight, sizing, halves.spanInCells, rows)
         val cellHeight = cellHeight(cellWidth, sizing)
         val top = topOffset + topOverhang(cellHeight)
         val keys = ArrayList<PlacedKey>(
@@ -562,7 +577,7 @@ object HexBoard {
         return HexPlacement(
             cellWidth = cellWidth,
             boardWidth = viewportWidth,
-            boardHeight = blockHeight(cellWidth, sizing),
+            boardHeight = blockHeight(cellWidth, sizing, rows),
             leftInset = 0f,
             scale = if (naturalCell > 0f) cellWidth / naturalCell else 1f,
             sizing = sizing,
@@ -620,11 +635,12 @@ object HexBoard {
         availableHeight: Float,
         sizing: Sizing,
         spanInCells: Float,
+        rows: Int = ROWS,
     ): Float {
         if (viewportWidth <= 0f || !viewportWidth.isFinite()) return 0f
         val byWidth = if (spanInCells > 0f) viewportWidth / spanInCells else viewportWidth / COLUMNS
         if (availableHeight <= 0f || !availableHeight.isFinite()) return byWidth
-        return min(byWidth, availableHeight / blockHeightInCells(sizing))
+        return min(byWidth, availableHeight / blockHeightInCells(sizing, rows))
     }
 
     /**

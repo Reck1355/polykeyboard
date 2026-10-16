@@ -710,6 +710,26 @@ object Layouts {
         Key(s, KeyType.CHARACTER, alternates = alternates.map(Char::toString), gestureEligible = false)
 
     /**
+     * The honeycomb's digit row, where a honeycomb can hold one.
+     *
+     * A digit row is a fifth row, and on the honeycomb a fifth row is not free. Portrait takes it:
+     * that board is uncapped, so its block grows by a row and every key keeps its size. Landscape
+     * does not, and both reasons are things already decided about that board. It is pinned to an
+     * approved height its block is already at, so a fifth row could only be paid for by shortening
+     * every row, which flattens the flat hexagon past its ratio and deforms the key shape that board
+     * exists to avoid, or by raising that cap, the one direction the landscape board may not move.
+     * So the digits are not added there, and the setting reads as what it is: a portrait setting.
+     *
+     * It lives here rather than in the view because it is the board's rule, and a rule written
+     * inside a view is one no test can see.
+     */
+    fun withNumberRowForHoneycomb(
+        layout: KeyboardLayout,
+        enabled: Boolean,
+        portrait: Boolean,
+    ): KeyboardLayout = withNumberRow(layout, enabled && (portrait || !layout.hexKeys))
+
+    /**
      * Inserts the digit row at the top when the setting is enabled.
      *
      * Which of the two rows is inserted is decided by the board, not by the setting: a honeycomb needs

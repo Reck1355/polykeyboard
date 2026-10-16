@@ -137,4 +137,26 @@ class LayoutsTest {
         Layouts.TimePad,
         Layouts.DateTimePad,
     )
+
+    @Test
+    fun `the honeycomb takes a digit row in portrait and not in landscape`() {
+        val hex = Layouts.boardsFor(KeyboardLanguages.FALLBACK).hex
+
+        val portrait = Layouts.withNumberRowForHoneycomb(hex, enabled = true, portrait = true)
+        assertEquals("portrait takes the row", hex.rows.size + 1, portrait.rows.size)
+        assertEquals("and it is the honeycomb's own row", Layouts.hexNumberRow, portrait.rows.first())
+
+        val landscape = Layouts.withNumberRowForHoneycomb(hex, enabled = true, portrait = false)
+        assertSame("landscape is handed the same board, untouched", hex, landscape)
+
+        // A setting that is off stays off in either orientation, and a rectangular board is never
+        // touched by the honeycomb's rule — it has the room, and its own row is the one it takes.
+        assertSame(hex, Layouts.withNumberRowForHoneycomb(hex, enabled = false, portrait = true))
+        val rect = Layouts.boardsFor(KeyboardLanguages.FALLBACK).qwerty
+        assertEquals(
+            "a rectangular board still takes the row in landscape",
+            rect.rows.size + 1,
+            Layouts.withNumberRowForHoneycomb(rect, enabled = true, portrait = false).rows.size,
+        )
+    }
 }

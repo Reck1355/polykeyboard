@@ -537,7 +537,9 @@ class KeyboardView @JvmOverloads constructor(
             // one place the keyboard's own height is measured from it.
             val natural = topPadding + header +
                 HexBoard.scaledBoardHeight(
-                    HexBoard.cappedBoardHeight(width.toFloat(), displayHeight(), hexSizing()),
+                    HexBoard.cappedBoardHeight(
+                        width.toFloat(), displayHeight(), hexSizing(), effectiveHexLayout().rows.size,
+                    ),
                     settings.keyHeightScale,
                 ) +
                 bottomInset()
@@ -608,6 +610,24 @@ class KeyboardView @JvmOverloads constructor(
      * hexagon. Only the factor is reported here; the shape is [HexKeyMetrics]' and is never
      * recomputed in the view.
      */
+    /**
+     * The honeycomb board with its digit row applied where the board can hold one.
+     *
+     * Both the drawing and the measuring come through here, and that is the point: when they asked
+     * separately, the measuring never applied the row at all, so the digit row was drawn a full row past
+     * the block the keyboard had measured for itself. That was the landscape report — the board grew
+     * downward by exactly one row and the keys sat past the bottom of the frame.
+     *
+     * Whether the board is the single tall one or the two-handed split comes from the sizing rather than
+     * from the display's orientation, so this cannot disagree with the geometry that decides the block:
+     * one source, one answer.
+     */
+    private fun effectiveHexLayout(): KeyboardLayout = Layouts.withNumberRowForHoneycomb(
+        keyboardLayout,
+        settings.showNumberRow,
+        portrait = !hexSizing().split,
+    )
+
     private fun placeHexBoard(
         layout: KeyboardLayout,
         viewWidth: Float,
@@ -615,7 +635,7 @@ class KeyboardView @JvmOverloads constructor(
         topOffset: Float,
     ): List<PlacedKey> {
         val placement = HexBoard.place(
-            layout,
+            effectiveHexLayout(),
             viewWidth,
             availableHeight,
             hexSizing(),
