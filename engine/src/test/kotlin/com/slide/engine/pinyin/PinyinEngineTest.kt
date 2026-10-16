@@ -9,9 +9,18 @@ import org.junit.Test
  * The engine's numbers, on a fixed table that does not move.
  *
  * The table is not decoration. The unigram-only version of this decoder — the first thing written,
- * before the pair model existed — scored 4 of these 40, and every one of those four is a named case
+ * before the pair model existed — scored 4 of these cases, and every one of those is a named case
  * below so that the improvement cannot be quietly given back. The threshold is the measured result,
- * not a wish: 36 of 40 top-1, and every expected word reachable in the top eight.
+ * not a wish.
+ *
+ * Two of the cases were once wrong for a reason no decoder work could reach: the frequency column
+ * came from a dictionary whose counts lean on news text, where 在建 ("under construction", a
+ * roadside sign) outranks 再见 ("goodbye", a thing people say) — 444 against 343 — so `zaijian`
+ * offered "under construction". 星期 against 兴起 was the same shape, 7,842 against 207 in spoken
+ * counts where the dictionary had it backwards. The frequency column is now a blend with
+ * subtitle-derived counts of spoken Chinese (see `tools/build_pinyin.py`, and note that the
+ * dictionary keeps a minority share: drop it entirely and 北京 loses to 背景 because subtitles are
+ * thin on proper nouns). Both words are rank 1 and are asserted as such below.
  *
  * `xian` is deliberately outside the strict set. For the bare string, 西安 (Xi'an) really is a rarer
  * reading than 见/先/县, and a Chinese IME does not put it first either — so asserting it would be
@@ -27,19 +36,21 @@ class PinyinEngineTest {
     }
 
     @Test
-    fun `top-1 accuracy is at least the measured 90 percent`() {
+    fun `every expected word is the first reading, not merely reachable`() {
         val engine = engine()
         val misses = mutableListOf<String>()
         var hits = 0
         for ((input, expected) in TABLE) {
-            val readings = engine.readings(input, limit = 1)
-            val got = if (readings.isEmpty()) "(nothing)" else readings.first()
+            val got = engine.best(input) ?: "(nothing)"
             if (got == expected) hits++ else misses += "$input -> $got (want $expected)"
         }
         val rate = 100.0 * hits / TABLE.size
-        println("pinyin top-1: $hits/${TABLE.size} = ${"%.0f".format(rate)}%")
-        println("misses: ${if (misses.isEmpty()) "none" else misses.joinToString("; ")}")
-        assertTrue("Top-1 accuracy fell to $hits/${TABLE.size}: ${misses.joinToString("; ")}", hits >= 36)
+        println("pinyin top-1: $hits/${TABLE.size} = " + "%.0f".format(rate) + "%")
+        println("misses: " + (if (misses.isEmpty()) "none" else misses.joinToString("; ")))
+        // The whole table, exactly. "Reachable in the top eight" was the old bar, and it let a wrong
+        // first answer pass for weeks. A candidate strip shows the top few, so a word that is only
+        // second is a word he picks by hand every single time.
+        assertEquals("Wrong first reading: " + misses.joinToString("; "), TABLE.size, hits)
     }
 
     @Test
@@ -73,25 +84,36 @@ class PinyinEngineTest {
     }
 
     /**
+     * The two words that lost to the wrong register, asserted by name.
+     *
+     * These are the cases Jacky reported: `zaijian` offered 在建 ("under construction") and `xingqi`
+     * offered 兴起 ("to rise"), each with the right word sitting at rank 2. Nothing in the decoder
+     * was wrong — the frequency column was. They are named here so a frequency source that goes back
+     * to news-only counts fails loudly, with the word in the message.
+     */
+    @Test
+    fun `goodbye and week win against the news-register words`() {
+        val engine = engine()
+        assertEquals("zaijian must read as 再见", "再见", engine.best("zaijian"))
+        assertEquals("xingqi must read as 星期", "星期", engine.best("xingqi"))
+    }
+
+    /**
      * Ambiguities that are not bugs, recorded so nobody "fixes" them by guessing.
      *
-     * `zaijian` reads as 在建 and `xingqi` as 兴起. Both are legitimate readings of the bare string,
-     * and in both cases the expected word is the colloquial one: this build's frequencies come from
-     * jieba, whose counts lean on news text, where "under construction" outranks "goodbye". No
-     * amount of decoder work fixes a frequency table that is the wrong register — the fix is a
-     * bigger, more conversational corpus, which is a data change and is recorded as such.
-     *
-     * `xian` is the same shape: 西安 is genuinely a rarer reading than 见/先/县 for two letters alone.
+     * `xian` is the only one left. For two bare letters, 西安 (Xi'an) really is a rarer reading than
+     * 见/先/县, and a Chinese IME does not put it first either — 西安 wants an apostrophe or some
+     * context. `zaijian` and `xingqi` used to be listed here with the same excuse; they are now
+     * asserted as rank 1 above, because the frequency column was fixable and was fixed.
      */
     @Test
     fun `bare string ambiguities are documented rather than fudged`() {
         val engine = engine()
-        for ((input, colloquial) in listOf("zaijian" to "再见", "xingqi" to "星期", "xian" to "西安")) {
+        for ((input, rarer) in listOf("xian" to "西安")) {
             val readings = engine.readings(input, limit = 20)
             assertTrue("$input produced no reading at all", readings.isNotEmpty())
-            println("$input -> ${readings.take(4).joinToString(" | ")}${
-                if (colloquial in readings) "   ($colloquial reachable)" else "   ($colloquial not in the top 20)"
-            }")
+            println("$input -> " + readings.take(4).joinToString(" | ") +
+                (if (rarer in readings) "   ($rarer reachable)" else "   ($rarer not in the top 20)"))
         }
     }
 
@@ -213,7 +235,10 @@ class PinyinEngineTest {
             "xiexieni" to "谢谢你",
             "buhaoyisi" to "不好意思",
             "meibanfa" to "没办法",
-            "xiangni" to "向你",
+            // Was "向你" ("toward you") until the frequency column moved to spoken counts. 想你 —
+            // "miss you" — is what anyone typing these letters means, and it now wins. The old
+            // expectation was the table disagreeing with the data, so the expectation moved.
+            "xiangni" to "想你",
         )
     }
 }

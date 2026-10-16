@@ -2,10 +2,30 @@
 """Compile the pinyin engine's data assets. Deterministic, verifiable, no network at build time by default.
 
 Sources (all public; licences recorded in the emitted PINYIN-LICENSES.md):
-  * CC-CEDICT            - Chinese->English with pinyin, CC BY-SA 4.0
-  * jieba's dict.txt     - word frequencies, MIT
-  * a Chinese text corpus - word bigrams; Tatoeba sentences (CC BY 2.0) by
-                            default, and any UTF-8 text file can be substituted
+  * CC-CEDICT              - Chinese->English with pinyin, CC BY-SA 4.0
+  * jieba's dict.txt       - word frequencies, MIT
+  * OpenSubtitles2018 token counts
+                           - how often words are actually SPOKEN, CC BY-SA 4.0
+  * a Chinese text corpus  - word bigrams; Tatoeba sentences (CC BY 2.0) by
+                             default, and any UTF-8 text file can be substituted
+
+Why two frequency sources rather than one, measured on a fixed 40-case table
+(see cache/scratch/pinyin_probe3.py and the gates file):
+
+  * jieba's counts come from news text, where 在建 ("under construction", a
+    roadside sign) outranks 再见 ("goodbye", a thing people say) - 444 against
+    343. In subtitle-derived counts of spoken Chinese the same two words are
+    62 against 28,825, a reversal of about 465x. The keyboard was therefore
+    offering "under construction" for `zaijian`. Same shape for 星期 against
+    兴起: 7,842 against 207, where jieba had it backwards.
+  * dropping jieba entirely breaks the other direction: 北京 ("Beijing") falls
+    behind 背景 ("background") because a subtitle corpus is thin on proper
+    nouns. Keeping jieba as a minority share holds that up.
+
+So the frequency column is a weighted blend, and the weight is measured rather than chosen: on a
+fixed table of common inputs, news-only counts read 36 of 40 correctly, the blend at any weight from
+0.5 to 0.9 reads 39, and spoken counts alone drop to 38 because 北京 loses to 背景. 0.7 sits in the
+middle of the safe band.
 
 Emits into engine/src/main/assets/pinyin/:
   syllables.txt   one legal syllable per line, sorted (derived from CC-CEDICT)
@@ -36,6 +56,12 @@ OUT = os.path.join(REPO, "engine", "src", "main", "assets", "pinyin")
 CEDICT_URL = "https://www.mdbg.net/chinese/export/cedict/cedict_1_0_ts_utf-8_mdbg.txt.gz"
 JIEBA_URL = "https://raw.githubusercontent.com/fxsjy/jieba/master/jieba/dict.txt"
 TATOEBA_URL = "https://downloads.tatoeba.org/exports/per_language/cmn/cmn_sentences.tsv.bz2"
+# OpenSubtitles2018 token counts, content CC BY-SA 4.0 (hermitdave/FrequencyWords).
+SUBTITLES_URL = "https://raw.githubusercontent.com/hermitdave/FrequencyWords/master/content/2018/zh_cn/zh_cn_full.txt"
+
+# The measured weight of spoken usage in the frequency column, and its complement
+# for the news-leaning dictionary. See the module docstring for the numbers.
+SPOKEN_WEIGHT = 0.7
 
 CJK = re.compile(r"^[\u4e00-\u9fff]+$")
 ENTRY = re.compile(r"^(\S+) (\S+) \[([^\]]*)\] /(.*)/$")
@@ -123,6 +149,43 @@ def tokenise(freq: dict[str, int]):
     return cut
 
 
+def load_counts(path: str) -> dict[str, int]:
+    """`word count` per line, the shape both jieba's dict and the subtitle lists use."""
+    counts: dict[str, int] = {}
+    with open(path, encoding="utf-8", errors="replace") as fh:
+        for line in fh:
+            bits = line.split()
+            if len(bits) >= 2:
+                try:
+                    counts[bits[0]] = int(bits[1])
+                except ValueError:
+                    pass
+    return counts
+
+
+def blend_frequencies(dict_freq: dict[str, int], spoken_freq: dict[str, int], spoken_weight: float) -> dict[str, int]:
+    """Weighted mix of two frequency tables, returned as integer counts.
+
+    The count column is only ever read as a relative weight, so what matters is the ratio between
+    words, not the absolute scale; both sides are normalised to a probability first so that a
+    corpus three times larger cannot simply shout louder. Words the spoken table has never seen
+    keep their dictionary weight scaled down (that is the `(1 - w)` term), and words only the
+    spoken table knows are admitted at `w` of their own share - which is how 再见 gets in at all.
+    """
+    n_dict = sum(dict_freq.values()) or 1
+    n_spoken = sum(spoken_freq.values()) or 1
+    out: dict[str, int] = {}
+    for word, count in dict_freq.items():
+        p = (1.0 - spoken_weight) * (count / n_dict)
+        if word in spoken_freq:
+            p += spoken_weight * (spoken_freq[word] / n_spoken)
+        out[word] = max(1, int(round(p * 1e9)))
+    for word, count in spoken_freq.items():
+        if word not in out:
+            out[word] = max(1, int(round(spoken_weight * (count / n_spoken) * 1e9)))
+    return out
+
+
 def load_corpus(path: str) -> str:
     if path.endswith(".bz2"):
         return bz2.open(path, "rt", encoding="utf-8", errors="replace").read()
@@ -163,6 +226,8 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--data", default=os.path.join(os.path.expanduser("~"), "cache", "scratch", "pinyin-data"))
     ap.add_argument("--corpus", default=None, help="any UTF-8 (or .bz2) text file; default Tatoeba Chinese")
+    ap.add_argument("--subtitles", default=None, help="word-per-line token counts for SPOKEN frequency; default OpenSubtitles zh_cn")
+    ap.add_argument("--spoken-weight", type=float, default=SPOKEN_WEIGHT, help="share of the frequency column taken from spoken usage, 0 to 1")
     ap.add_argument("--bigrams", type=int, default=250_000)
     ap.add_argument("--out", default=OUT)
     ap.add_argument("--verify", action="store_true", help="rebuild to a temp dir and compare")
@@ -177,15 +242,23 @@ def main() -> int:
 
     cedict = need(os.path.join(args.data, "cedict.txt.gz"), CEDICT_URL)
     jieba = need(os.path.join(args.data, "jieba-dict.txt"), JIEBA_URL)
+    subtitles = args.subtitles or need(os.path.join(args.data, "subtitles_zh_cn_full.txt"), SUBTITLES_URL)
     corpus_path = args.corpus or need(os.path.join(args.data, "cmn_sentences.tsv.bz2"), TATOEBA_URL)
 
     by_pinyin, syllables, kept, skipped = load_cedict(cedict)
-    freq = load_frequencies(jieba)
+    dict_freq = load_frequencies(jieba)
     text = load_corpus(corpus_path)
-    bigrams = build_bigrams(text, freq, args.bigrams)
+    # Bigrams are still tokenised against the dictionary's own vocabulary: that combination is the
+    # one the table was measured with, and widening the tokeniser's vocabulary changes segmentation
+    # and therefore every pair count. Not a thing to slip in beside a frequency change.
+    bigrams = build_bigrams(text, dict_freq, args.bigrams)
+    spoken_freq = load_counts(subtitles)
+    freq = blend_frequencies(dict_freq, spoken_freq, args.spoken_weight)
 
     print(f"cedict entries kept {kept} (skipped {skipped}); distinct words {len({w for v in by_pinyin.values() for w, _ in v})}")
-    print(f"syllables {len(syllables)}; frequencies {len(freq)}; bigrams {len(bigrams)}; corpus chars {len(text)}")
+    print(f"syllables {len(syllables)}; dictionary frequencies {len(dict_freq)}; spoken frequencies {len(spoken_freq)}")
+    print(f"blended frequencies {len(freq)} at {args.spoken_weight:.2f} spoken / {1 - args.spoken_weight:.2f} news")
+    print(f"bigrams {len(bigrams)}; corpus chars {len(text)}")
 
     with open(os.path.join(out, "syllables.txt"), "w", encoding="utf-8", newline="\n") as fh:
         for s in sorted(syllables):
@@ -213,9 +286,16 @@ assets. `--verify` rebuilds them into a temp directory and compares.
 | file | built from | licence | obligation |
 |---|---|---|---|
 | `dict.bin`, `syllables.txt` | CC-CEDICT (`cedict_1_0_ts_utf-8_mdbg.txt.gz`, mdbg.net) | **CC BY-SA 4.0** | credit CC-CEDICT in the app's About, and keep any redistributed copy of the *data* under CC BY-SA |
-| `dict.bin` (frequency column) | jieba `dict.txt` (github.com/fxsjy/jieba) | **MIT** | keep the copyright notice with redistributed data |
+| `dict.bin` (frequency column) | OpenSubtitles2018 token counts (`zh_cn_full.txt`, github.com/hermitdave/FrequencyWords) | **CC BY-SA 4.0** | credit OpenSubtitles/FrequencyWords in the app's About; share-alike on the redistributed *data* |
+| `dict.bin` (frequency column) | jieba `dict.txt` (github.com/fxsjy/jieba), at {1 - SPOKEN_WEIGHT:.2f} weight | **MIT** | keep the copyright notice with redistributed data |
 | `bigrams.bin` | {os.path.basename(corpus_path)} | **CC BY 2.0** (Tatoeba) if the default corpus; otherwise the corpus's own | credit Tatoeba; the derived bigram counts are a share-alike derivative of the corpus |
 | `syllables.txt` | derived from CC-CEDICT, not typed by hand | as above | none beyond the above |
+
+The frequency column mixes two sources on purpose, with the weight measured rather than chosen:
+a keyboard has to rank `zaijian` as 再见 ("goodbye") and not 在建 ("under construction"), and
+spoken-usage counts are the only ones that know that. The mixture is
+{SPOKEN_WEIGHT:.2f} OpenSubtitles / {1 - SPOKEN_WEIGHT:.2f} jieba; see `tools/build_pinyin.py`'s
+module docstring for the measurement.
 
 Nothing here restricts the application's own source code: these are data
 obligations (attribution, share-alike on the data), and Apache-2.0 code may

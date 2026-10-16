@@ -34,7 +34,7 @@ class PinyinAttributionTest {
         }
         assertTrue("$KEY is missing from strings.xml", credit != null)
 
-        for (expected in listOf("CC-CEDICT", "CC BY-SA 4.0", "jieba", "MIT", "Tatoeba", "CC BY 2.0")) {
+        for (expected in listOf("CC-CEDICT", "CC BY-SA 4.0", "jieba", "MIT", "OpenSubtitles", "FrequencyWords", "Tatoeba", "CC BY 2.0")) {
             assertTrue("The pinyin credit no longer names $expected: $credit", credit!!.contains(expected))
         }
     }
@@ -45,7 +45,7 @@ class PinyinAttributionTest {
             .let { if (it.exists()) it else File("../engine/src/main/assets/pinyin/PINYIN-LICENSES.md") }
         assertTrue("Run tools/build_pinyin.py; ${licences.absolutePath} is missing", licences.exists())
         val text = licences.readText()
-        for (expected in listOf("CC-CEDICT", "jieba", "Tatoeba", "CC BY-SA", "MIT", "CC BY 2.0")) {
+        for (expected in listOf("CC-CEDICT", "jieba", "Tatoeba", "OpenSubtitles", "CC BY-SA", "MIT", "CC BY 2.0")) {
             assertTrue("PINYIN-LICENSES.md no longer names $expected", text.contains(expected))
         }
     }

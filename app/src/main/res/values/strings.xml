@@ -7,5 +7,5 @@
       lands with the Chinese board, and the build already ships PINYIN-LICENSES.md beside the data
       itself. A test asserts every name and licence below survives editing.
     -->
-    <string name="pinyin_attribution">Chinese input data: CC-CEDICT (CC BY-SA 4.0), jieba dictionary (MIT), Tatoeba sentences (CC BY 2.0).</string>
+    <string name="pinyin_attribution">Chinese input data: CC-CEDICT (CC BY-SA 4.0), jieba dictionary (MIT), OpenSubtitles word frequencies via FrequencyWords (CC BY-SA 4.0), Tatoeba sentences (CC BY 2.0).</string>
 </resources>

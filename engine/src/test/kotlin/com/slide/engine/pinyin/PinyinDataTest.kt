@@ -126,6 +126,51 @@ class PinyinDataTest {
         assertTrue(error.message!!, error.message!!.contains("syllable"))
     }
 
+    /**
+     * The frequency column carries a decision, and asserting it here is the only place that can
+     * catch a rebuild from the wrong kind of text.
+     *
+     * `zaijian` used to read as 在建 ("under construction") and `xingqi` as 兴起 ("to rise"), each
+     * with the word a person means sitting at rank 2. Nothing in the decoder was wrong: a news
+     * corpus counts 在建 (444) above 再见 (343), and because that ratio is all the decoder sees, the
+     * sign of it is the sign of the answer. Counts of spoken Chinese have the same two words at 62
+     * and 28,825, and the column is now 70% spoken (see `tools/build_pinyin.py`). In the shipped
+     * bytes the ratio is 237,740 against 2,724 — the right way round, by two orders of magnitude.
+     *
+     * The ratio is the assertion, not the ordering: any future source that puts 再见 merely first,
+     * by a hair, has not reproduced the fix and should fail here.
+     */
+    @Test
+    fun `the frequency column ranks spoken usage above news usage`() {
+        val dict = File("src/main/assets/${PinyinData.DICT_ASSET}")
+        assertTrue("Missing ${dict.absolutePath}; run tools/build_pinyin.py", dict.exists())
+
+        val counts = HashMap<String, Int>()
+        dict.inputStream().use { stream ->
+            for (record in PinyinData.readRecords(stream)) {
+                // A word can sit under more than one key (那 is both `na` and `nei`), so the best
+                // count is the one that matters.
+                if (record.count > (counts[record.word] ?: 0)) counts[record.word] = record.count
+            }
+        }
+
+        val goodbye = counts["再见"] ?: 0
+        val construction = counts["在建"] ?: 0
+        val week = counts["星期"] ?: 0
+        val rise = counts["兴起"] ?: 0
+        println("再见 $goodbye vs 在建 $construction ($goodbye / $construction)   |   星期 $week vs 兴起 $rise ($week / $rise)")
+        println("CC-CEDICT words carrying a frequency: " + counts.size)
+
+        assertTrue("再见 is not in the dictionary at all", goodbye > 0)
+        assertTrue("在建 outranks 再见 ($construction > $goodbye); the column is news-only again", goodbye > construction)
+        assertTrue("兴起 outranks 星期 ($rise > $week); the column is news-only again", week > rise)
+        assertTrue("再见 leads 在建 by only $goodbye to $construction, not the two orders of magnitude spoken counts give", goodbye > 50 * construction)
+        assertTrue("星期 leads 兴起 by only $week to $rise", week > 4 * rise)
+        // 92,178 of the 120,232 CC-CEDICT words carry a count. A dictionary-only build leaves a
+        // quarter of them at zero, so this floor is the "the spoken half is still wired in" check.
+        assertTrue("Only " + counts.size + " words carry a frequency; the spoken half is missing", counts.size > 80_000)
+    }
+
     /** Writes the layout `tools/build_pinyin.py:write_strings` produces, with room to write it wrongly. */
     private fun packed(
         records: List<Triple<String, String, Int>>,
