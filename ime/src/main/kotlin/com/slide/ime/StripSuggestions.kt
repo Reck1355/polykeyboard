@@ -22,6 +22,14 @@ internal object StripSuggestions {
     fun wordsOnly(words: List<String>): List<StripSuggestion> =
         words.map { StripSuggestion(it) }
 
+    /**
+     * True when the keyboard has a fix on offer for the word being typed.
+     *
+     * The strip's mark and the underline in the text are both decided here, so the two cannot end up
+     * disagreeing about the same word.
+     */
+    fun hasCorrection(words: List<WordSuggestion>): Boolean = from(words).any { it.isCorrection }
+
     fun from(words: List<WordSuggestion>): List<StripSuggestion> = words.map { candidate ->
         StripSuggestion(
             word = candidate.word,

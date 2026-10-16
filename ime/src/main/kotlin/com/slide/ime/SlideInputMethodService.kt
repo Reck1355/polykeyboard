@@ -340,6 +340,14 @@ class SlideInputMethodService :
     /** What a separator would turn [composing] into, or null to leave it as typed. */
     private var pendingAutocorrection: String? = null
 
+    /**
+     * True while the word being typed carries a correction, so [composing] is handed over underlined.
+     *
+     * The user's ask, verbatim: "Underline text too". The strip said a fix was on offer and the text
+     * said nothing, which left the warning on the wrong side of the thumb.
+     */
+    private var correctingComposing = false
+
     /** Last text-free suggestion decision for the active composing word. */
     private var pendingTypedQuality: PendingTypedQuality? = null
 
@@ -2611,6 +2619,7 @@ class SlideInputMethodService :
 
     private fun clearSuggestions() {
         suggestionStrip?.clear()
+        correctingComposing = false
         lastGestureCommit = null
         lastGestureLearnedPair = null
         stripMode = StripMode.Empty
@@ -3191,7 +3200,11 @@ class SlideInputMethodService :
                     }
                 } else {
                     val next = composing.toString() + text
-                    if (connection.setComposingText(next, 1)) {
+                    if (connection.setComposingText(
+                            ComposingUnderline.apply(next, correctingComposing),
+                            1,
+                        )
+                    ) {
                         recordTouch(composing.length, touchX, touchY)
                         composing.append(text)
                         characterCommitted = true
@@ -3365,7 +3378,13 @@ class SlideInputMethodService :
         if (composing.isNotEmpty()) {
             val nextLength = AndroidGraphemeBoundaries.previousBoundary(composing, composing.length)
             val next = composing.substring(0, nextLength)
-            if (!connection.setComposingText(next, 1)) return callbackPossible
+            if (!connection.setComposingText(
+                    ComposingUnderline.apply(next, correctingComposing),
+                    1,
+                )
+            ) {
+                return callbackPossible
+            }
             composing.setLength(nextLength)
             recordTouch(nextLength, Float.NaN, Float.NaN)
             if (next.isEmpty()) {
@@ -3725,6 +3744,18 @@ class SlideInputMethodService :
         // the cursor is a typo. Mapping to bare words here is what left the strip unable to
         // mark a fix differently from a completion.
         suggestionStrip?.setSuggestions(StripSuggestions.from(result.words))
+
+        // The same verdict, drawn where the user is actually looking. Re-stated only when it changes,
+        // so the word is underlined the moment the engine forms an opinion about it rather than one
+        // keystroke later, and a steady word is not rewritten on every key.
+        val underline = StripSuggestions.hasCorrection(result.words)
+        if (underline != correctingComposing) {
+            correctingComposing = underline
+            currentInputConnection?.setComposingText(
+                ComposingUnderline.apply(composing, underline),
+                1,
+            )
+        }
     }
 
     private fun recordTypedDecision(outcome: DecisionOutcome) {

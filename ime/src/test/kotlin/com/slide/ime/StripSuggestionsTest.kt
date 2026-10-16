@@ -42,4 +42,13 @@ class StripSuggestionsTest {
         assertEquals(words.map { it.word }, strip.map { it.word })
         assertEquals(words.size, strip.size)
     }
+
+    @Test
+    fun `the text underline and the strip mark are decided by one verdict`() {
+        // The strip's mark and the underline under the word in the editor both read this, so a word
+        // cannot be underlined in one place and left plain in the other.
+        assertTrue(StripSuggestions.hasCorrection(listOf(typed("teh"), correction("the"))))
+        assertFalse(StripSuggestions.hasCorrection(listOf(typed("teh"), completion("then"))))
+        assertFalse(StripSuggestions.hasCorrection(emptyList()))
+    }
 }
