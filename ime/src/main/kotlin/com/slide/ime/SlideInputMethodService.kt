@@ -125,6 +125,13 @@ import java.io.FileDescriptor
 import java.io.PrintWriter
 import kotlin.math.exp
 
+/**
+ * How many pinyin readings are offered to the strip. The strip draws three at a time and scrolls
+ * through the rest, so this is how far the scroll reaches; the two are deliberately the same number
+ * and the strip's own HOLD_AT_MOST must move with it.
+ */
+private const val PINYIN_OFFERED = 40
+
 class SlideInputMethodService :
     InputMethodService(),
     KeyboardView.Listener,
@@ -3207,7 +3214,10 @@ class SlideInputMethodService :
         // they are more common words that merely begin with those letters, and pushed 家 to fourth;
         // and for a phrase like `woaini` it answers nothing at all, because no single word's pinyin
         // is that string. The engine reads the whole thing as well, which is where 我爱你 lives.
-        return engine.keyboardCandidates(pinyinTyping.composing.toString())
+        // More than a strip's worth on purpose. The strip holds a window of three and scrolls
+        // through the rest, so capping the list here would decide that the fourth reading of a
+        // syllable does not exist, which is exactly what the user reported.
+        return engine.keyboardCandidates(pinyinTyping.composing.toString(), PINYIN_OFFERED)
             .map { StripSuggestion(it, isCorrection = false) }
     }
 

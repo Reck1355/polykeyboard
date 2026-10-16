@@ -27,9 +27,22 @@ object GestureModels {
 
     /** The one language the packaged swipe model was trained on. */
     const val ENGLISH = "en"
+    const val SPANISH = "es"
 
     /** Every language with a swipe model in the shipped assets. */
-    val LANGUAGES: Set<String> = setOf(ENGLISH)
+    /**
+     * The languages a swipe can decode in.
+     *
+     * Spanish is here because the two things a swipe needs are both already true of it: the letters
+     * sit in the same places, since the Spanish board is the English board with accents on the popups
+     * rather than keys of their own, and there is a Spanish word list in the APK, shipped since the
+     * language became reachable. An accented word swiped with a plain letter is a word the trie does
+     * not hold, so a few of them will be missed; a keyboard that decodes nothing at all misses all
+     * of them, which is the worse of the two. Mandarin is absent for a real reason and not for want
+     * of trying: a swipe there must land on a pinyin string rather than a word, and the word list it
+     * would be matched against is the key set of the pinyin table, which is a separate change.
+     */
+    val LANGUAGES: Set<String> = setOf(ENGLISH, SPANISH)
 
     /** Whether a swipe can be decoded for [language] rather than guessed at. */
     fun supports(language: String): Boolean = language in LANGUAGES

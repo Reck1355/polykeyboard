@@ -8,6 +8,7 @@ import com.slide.engine.gesture.GestureModels
 import com.slide.engine.gesture.GesturePoint
 import com.slide.engine.lexicon.Lexicon
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -87,16 +88,31 @@ class GestureAvailabilityTest {
     }
 
     @Test
-    fun `the Spanish language reaches the swipe path with no decoder and so with no gesture typing`() {
+    fun `Spanish glides against its own word list, and Mandarin is the language that does not`() {
         val lexicon = Lexicon(CharArray(0), intArrayOf(0), ByteArray(0), ByteArray(0))
+        // Spanish is decoded now: it has a word list in this build, and the letters a swipe passes over
+        // sit in the same places as English's, accents living on the popups rather than on keys.
         val spanish = KeyboardLanguages.resolve("es_ES")
-        val decoder = GestureModels.deterministicDecoderFor(spanish, lexicon, null, null)
-        assertNull(decoder)
+        val spanishDecoder = GestureModels.deterministicDecoderFor(spanish, lexicon, null, null)
+        assertNotNull(spanishDecoder)
+        assertTrue(
+            GestureAvailability.available(
+                gestureTypingEnabled = true,
+                suggestionsAllowed = true,
+                decoder = spanishDecoder,
+                alphaLayer = true,
+                panelShown = false,
+            ),
+        )
+        // Mandarin is where a swipe has nothing to be matched against, so it is refused and the
+        // general rule stands unchanged: no decoder, no gesture typing.
+        val chinese = KeyboardLanguages.resolve("zh_CN")
+        assertNull(GestureModels.deterministicDecoderFor(chinese, lexicon, null, null))
         assertFalse(
             GestureAvailability.available(
                 gestureTypingEnabled = true,
                 suggestionsAllowed = true,
-                decoder = decoder,
+                decoder = null,
                 alphaLayer = true,
                 panelShown = false,
             ),

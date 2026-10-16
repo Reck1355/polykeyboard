@@ -18,18 +18,27 @@ import org.junit.Test
 class GestureModelsTest {
 
     @Test
-    fun `only English has a trained swipe model in this build`() {
-        assertEquals(setOf("en"), GestureModels.LANGUAGES)
+    fun `the languages that can decode a swipe are exactly the ones with a word list`() {
+        assertEquals(setOf("en", "es"), GestureModels.LANGUAGES)
         assertTrue(GestureModels.supports("en"))
-        assertFalse(GestureModels.supports("es"))
+        assertTrue(GestureModels.supports("es"))
+        // Mandarin is absent on purpose rather than by omission: a swipe there has to land on a
+        // pinyin string, and the list it would be matched against is the pinyin table's key set,
+        // which is a different change from shipping a lexicon.
+        assertFalse(GestureModels.supports("zh"))
         assertFalse(GestureModels.supports(""))
     }
 
     @Test
-    fun `a language with no model gets no decoder at all`() {
+    fun `a language with a word list gets a decoder, and one without is refused`() {
         val lexicon = TestLexicon.instance
         assertNotNull(GestureModels.deterministicDecoderFor("en", lexicon, bigrams = null, trigrams = null))
-        assertNull(GestureModels.deterministicDecoderFor("es", lexicon, bigrams = null, trigrams = null))
+        // Spanish is decoded against the Spanish lexicon this build ships. The list is what the swipe
+        // is matched to, so passing one here is the whole of what Spanish glide needs.
+        assertNotNull(GestureModels.deterministicDecoderFor("es", lexicon, bigrams = null, trigrams = null))
+        // Mandarin has no list to match against, so it is refused outright rather than decoding
+        // English words onto a Chinese board.
+        assertNull(GestureModels.deterministicDecoderFor("zh", lexicon, bigrams = null, trigrams = null))
     }
 
     @Test
@@ -39,10 +48,14 @@ class GestureModelsTest {
         // this build ships data for rather than an empty board.
         assertTrue(GestureModels.supports(KeyboardLanguages.FALLBACK))
         assertTrue(GestureModels.supports(KeyboardLanguages.resolve("fr_FR")))
-        // Spanish resolves to itself and has no model: no glide. That is the whole of what this
-        // build claims about swiping in Spanish.
+        // Spanish resolves to itself and decodes against its own word list, so it glides without
+        // pretending to be English. An accented word swiped with a plain letter will be missed, and
+        // that is the accepted cost of decoding something rather than nothing.
         assertEquals(KeyboardLanguages.SPANISH, KeyboardLanguages.resolve("es_ES"))
-        assertFalse(GestureModels.supports(KeyboardLanguages.SPANISH))
+        assertTrue(GestureModels.supports(KeyboardLanguages.SPANISH))
+        // Mandarin is the one language this build declines to glide in, and the refusal is deliberate
+        // and named rather than a gap waiting to be filled by accident.
+        assertFalse(GestureModels.supports(KeyboardLanguages.CHINESE))
         // And every language with a model is a language the resolver can return at all.
         assertTrue(KeyboardLanguages.SUPPORTED.containsAll(GestureModels.LANGUAGES))
     }

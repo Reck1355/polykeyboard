@@ -82,7 +82,21 @@ class SuggestionStripView(context: Context) : View(context) {
     private fun sp(value: Float) =
         TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_SP, value, resources.displayMetrics)
 
-    private val words = ArrayList<StripSuggestion>(MAX_VISIBLE)
+    private val words = ArrayList<StripSuggestion>(HOLD_AT_MOST)
+
+    /**
+     * Which candidate the leftmost slot shows.
+     *
+     * A word table offers far more than three readings of what has been typed, and the words past
+     * the third are not noise: a person looking for 家 among the readings of `jia` needs the ones
+     * after the top three as much as the top three. The slots are a window onto the list and this is
+     * where the window opens; with no more candidates than fit, it stays at nought and the placement
+     * helper decides which slot the best word sits in.
+     */
+    private var scrollOffset = 0
+    private var dragStartX = 0f
+    private var lastDragX = 0f
+    private var dragging = false
 
     /** See [ellipsized]. */
     private var ellipsizedWidth = 0f
@@ -185,7 +199,9 @@ class SuggestionStripView(context: Context) : View(context) {
             }.joinToString(", ")
             node.addAction(AccessibilityNodeInfoCompat.ACTION_LONG_CLICK)
             val cellWidth = suggestionWidth() / MAX_VISIBLE
-            val visualSlot = SuggestionPlacement.slotForCandidate(words.size, index)
+            // A candidate scrolled off the edge has no place on screen to describe, so it is left out
+            // of the node tree entirely rather than announced at a position it does not occupy.
+            val visualSlot = slotOfIndex(index) ?: return
             val contentLeft = suggestionLeft()
             node.setBoundsInParent(
                 Rect(
@@ -259,7 +275,10 @@ class SuggestionStripView(context: Context) : View(context) {
      * underlining the wrong word. Callers with no opinion on labels pass [StripSuggestions.wordsOnly].
      */
     fun setSuggestions(candidates: List<StripSuggestion>) {
-        val requested = candidates.take(MAX_VISIBLE)
+        // Held well past what fits, because the ones past the third are reachable by scrolling and
+        // were previously thrown away before the strip ever saw them. Only MAX_VISIBLE are drawn at
+        // once; the rest wait their turn off the edge.
+        val requested = candidates.take(HOLD_AT_MOST)
         if (words.size == requested.size && words.indices.all { words[it] == requested[it] }) return
         // A pending hold captured a slot, not a word, and re-reads the list when it fires. Left
         // armed across a swap — the decoder finishing mid-hold — it would teach or forget whatever
@@ -269,6 +288,9 @@ class SuggestionStripView(context: Context) : View(context) {
         ellipsizedNormal.clear()
         ellipsizedBold.clear()
         requested.forEach(words::add)
+        // A new list is a new question, so the window opens at the start of it. Keeping an old scroll
+        // would drop the best reading off the left edge exactly when the user is watching it change.
+        scrollOffset = 0
         pressedIndex = -1
         settingsPressed = false
         clipboardPressed = false
@@ -334,6 +356,19 @@ class SuggestionStripView(context: Context) : View(context) {
 
         textPaint.textSize = sp(16f)
         val cellWidth = suggestionWidth() / MAX_VISIBLE
+
+        // More candidates than fit: a hairline under the words, as long as the share of the list on
+        // screen. It says the strip continues and where the user is in it, which is the difference
+        // between a scroll and a gesture nobody knows is there.
+        if (words.size > MAX_VISIBLE) {
+            val trackLeft = suggestionLeft()
+            val trackWidth = cellWidth * MAX_VISIBLE
+            val shown = (scrollOffset + MAX_VISIBLE).toFloat() / words.size
+            markPaint.color = keyboardTheme.suggestionHighlightText
+            markPaint.strokeWidth = dp(2f)
+            val lineY = height - dp(1.5f)
+            canvas.drawLine(trackLeft, lineY, trackLeft + trackWidth * shown, lineY, markPaint)
+        }
         // Vertically centre on the text's own middle rather than its baseline.
         textPaint.getFontMetrics(reusableMetrics)
         val baseline = height / 2f - (reusableMetrics.ascent + reusableMetrics.descent) / 2f
@@ -341,7 +376,7 @@ class SuggestionStripView(context: Context) : View(context) {
         // Keep the best candidate in the centre. That stable target is easier to scan and matches
         // the placement people have learned from mature mobile keyboards.
         for (slot in 0 until MAX_VISIBLE) {
-            val index = SuggestionPlacement.candidateAtSlot(words.size, slot) ?: continue
+            val index = candidateAtSlot(slot) ?: continue
             val left = suggestionLeft() + slot * cellWidth
 
             if (index == pressedIndex) {
@@ -531,6 +566,9 @@ class SuggestionStripView(context: Context) : View(context) {
         when (event.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
                 activePointerId = event.getPointerId(event.actionIndex)
+                dragStartX = event.x
+                lastDragX = event.x
+                dragging = false
                 settingsPressed = isOverSettings(event.x)
                 clipboardPressed = !settingsPressed && isOverClipboard(event.x)
                 editPressed = !settingsPressed && !clipboardPressed && isOverEdit(event.x)
@@ -554,6 +592,26 @@ class SuggestionStripView(context: Context) : View(context) {
                 // Sliding off cancels the press, matching how the keys behave. Coordinates come
                 // from the pressing finger, not index 0, which may belong to a different touch.
                 val (x, y) = activeCoordinates(event) ?: return true
+                // A horizontal drag scrolls the candidates instead of pressing one. The press is
+                // dropped the moment the drag is claimed, so a scroll can never commit the word the
+                // thumb happened to start on: the strip is the one place where a slip would type a
+                // word the user never chose.
+                if (words.size > MAX_VISIBLE && !settingsPressed && !clipboardPressed && !editPressed && !micPressed) {
+                    if (!dragging && kotlin.math.abs(x - dragStartX) > dp(8f)) {
+                        dragging = true
+                        releasePress()
+                    }
+                    if (dragging) {
+                        val cellWidth = suggestionWidth() / MAX_VISIBLE
+                        val moved = ((x - lastDragX) / cellWidth).toInt()
+                        if (moved != 0) {
+                            lastDragX += moved * cellWidth
+                            scrollOffset = (scrollOffset - moved).coerceIn(0, words.size - MAX_VISIBLE)
+                            invalidate()
+                        }
+                        return true
+                    }
+                }
                 val inBounds = y in 0f..height.toFloat()
                 val stillOnSettings = settingsPressed && isOverSettings(x) && inBounds
                 val stillOnClipboard = clipboardPressed && isOverClipboard(x) && inBounds
@@ -601,6 +659,7 @@ class SuggestionStripView(context: Context) : View(context) {
             }
 
             MotionEvent.ACTION_CANCEL -> {
+                dragging = false
                 releasePress()
             }
         }
@@ -693,6 +752,22 @@ class SuggestionStripView(context: Context) : View(context) {
     private fun isOverEdit(x: Float): Boolean =
         toolbarShown && x >= settingsWidth() * 2 && x < settingsWidth() * 3
 
+    /** The candidate drawn in [slot], or null when the window runs off the end of the list. */
+    private fun candidateAtSlot(slot: Int): Int? =
+        if (words.size <= MAX_VISIBLE) {
+            SuggestionPlacement.candidateAtSlot(words.size, slot)
+        } else {
+            (scrollOffset + slot).takeIf { it in words.indices }
+        }
+
+    /** Which slot [index] is drawn in, or null when it is scrolled out of sight. */
+    private fun slotOfIndex(index: Int): Int? =
+        if (words.size <= MAX_VISIBLE) {
+            SuggestionPlacement.slotForCandidate(words.size, index)
+        } else {
+            (index - scrollOffset).takeIf { it in 0 until MAX_VISIBLE }
+        }
+
     private fun indexAt(x: Float): Int {
         if (words.isEmpty()) return -1
         val slot = SuggestionStripLayout.slotAt(
@@ -702,7 +777,7 @@ class SuggestionStripView(context: Context) : View(context) {
             voiceEnabled = voiceEnabled,
             slotCount = MAX_VISIBLE,
         ) ?: return -1
-        return SuggestionPlacement.candidateAtSlot(words.size, slot) ?: -1
+        return candidateAtSlot(slot) ?: -1
     }
 
     /** Trims a word that will not fit its cell, so it degrades to "extraordi…" rather than clipping. */
@@ -764,6 +839,12 @@ class SuggestionStripView(context: Context) : View(context) {
 
     private companion object {
         const val MAX_VISIBLE = 3
+
+        /**
+         * How many candidates the strip holds. Enough to scroll a long way through a syllable's
+         * readings without keeping the whole table: `jia` alone has sixty-five.
+         */
+        const val HOLD_AT_MOST = 40
         const val HEIGHT_DP = 48f
         const val A11Y_WORD_BASE = 0
         const val A11Y_MIC = 100
