@@ -133,7 +133,7 @@ class HexBoardHeightCapTest {
         // half's inner edge ends.
         assertEquals(0f, measured.leftInset, 0.01f)
         assertEquals(0f, measured.rightBand, 0.01f)
-        assertEquals(747.3f, measured.channelWidth, 0.5f)
+        assertEquals(668.5f, measured.channelWidth, 0.5f)
         assertTrue("the channel is real", measured.channelWidth > 1f)
         assertEquals(
             HexBoard.splitHalves(Layouts.HexQwertyEn).left.spanInCells * measured.cellWidth,

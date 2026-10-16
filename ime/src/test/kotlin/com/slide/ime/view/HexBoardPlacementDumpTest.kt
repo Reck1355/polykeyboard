@@ -97,14 +97,16 @@ class HexBoardPlacementDumpTest {
     }
 
     @Test
-    fun `the landscape split hands the space bar one cell to each half`() {
+    fun `the landscape split hands the space bar two cells to each half`() {
         val halves = HexBoard.splitHalves(Layouts.HexQwertyEn)
         val leftSpaces = halves.left.rows.flatMap { it.keys }.filter { it.type == KeyType.SPACE }
         val rightSpaces = halves.right.rows.flatMap { it.keys }.filter { it.type == KeyType.SPACE }
         assertEquals("one space cell on the left", 1, leftSpaces.size)
         assertEquals("one space cell on the right", 1, rightSpaces.size)
-        assertEquals(1f, leftSpaces.single().widthWeight, 0f)
-        assertEquals(1f, rightSpaces.single().widthWeight, 0f)
+        // Half the three-cell space to each hand, rounded up, so the key both thumbs use is two
+        // joined hexagons per side rather than a single one.
+        assertEquals(2f, leftSpaces.single().widthWeight, 0f)
+        assertEquals(2f, rightSpaces.single().widthWeight, 0f)
 
         val placement = place(landscape, KeyboardSize.DEFAULT_STEP)
         assertEquals("two space hexagons are drawn", 2, placement.keys.filter { it.key.type == KeyType.SPACE }.size)
@@ -210,24 +212,30 @@ class HexBoardPlacementDumpTest {
         )
         assertNotNull("landscape symbols: the halves are held apart", wide.channel)
         assertTrue(
-            "landscape symbols: every key is still one cell on the lattice",
-            wide.keys.all { it.width <= wide.cellWidth + 0.01f },
+            "landscape symbols: every key is one cell, except the space, which is two",
+            wide.keys.all {
+                it.width <= wide.cellWidth + 0.01f ||
+                    (it.key.type == KeyType.SPACE && it.width <= 2f * wide.cellWidth + 0.01f)
+            },
         )
     }
 
     @Test
-    fun `landscape gives each thumb its own one-cell space hexagon, with a channel between`() {
-        // The report that produced this test was that landscape had no second space hexagon. The
-        // fixture says otherwise, and a claim about the board has to be settled by the board rather
-        // than by whichever of the two was read last, so the shape is pinned here: two spaces, one
-        // per half, each a single cell, and the halves held apart.
+    fun `landscape gives each thumb a two-hexagon space bar, with a channel between`() {
+        // His ask in his words: another hexagon on each side of the space bar, to give it more room.
+        // The split hands a key that straddles the cut half its cells to each hand, rounded up, so the
+        // three-cell space arrives here as two cells per thumb — two joined hexagons — and neither
+        // thumb gets the smaller key. The halves reach half a cell further inward for it, and that
+        // comes out of the channel rather than the cell, because the split's cell width is decided by
+        // the height. The first report that produced this test was that landscape had no second space
+        // hexagon at all; a claim about the board is settled by the board.
         val placement = place(landscape, KeyboardSize.DEFAULT_STEP)
         val spaces = placement.keys.filter { it.key.type == KeyType.SPACE }
         assertEquals("one space key per half", 2, spaces.size)
         for (space in spaces) {
             assertEquals(
-                "each space is one cell, not a fused bar",
-                placement.cellWidth,
+                "each space is two cells of joined hexagons, not one cell and not a fused bar",
+                2f * placement.cellWidth,
                 space.width,
                 0.01f,
             )

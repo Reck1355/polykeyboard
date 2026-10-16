@@ -143,7 +143,7 @@ object HexBoard {
      * read the halves' spans for itself; this is what it uses instead, and it is *not* free to drift:
      * the halves come from the layout's own row gaps, and the tests assert this equals their span.
      */
-    const val SPLIT_WIDTH_IN_CELLS = SPLIT_COLUMNS_PER_HALF * 2f + HONEYCOMB_STEP_IN_CELLS
+    const val SPLIT_WIDTH_IN_CELLS = SPLIT_COLUMNS_PER_HALF * 2f + HONEYCOMB_STEP_IN_CELLS * 2f
 
     /** The board's two sizings. Which axis is spent decides which hexagon ratio it gets. */
     enum class Orientation { PORTRAIT, LANDSCAPE }
@@ -308,10 +308,16 @@ object HexBoard {
                 when {
                     x >= cut -> rightKeys += key
                     right <= cut -> leftKeys += key
-                    // A key wider than one cell straddling the cut: one single cell to each half.
+                    // A key wider than one cell straddling the cut: half its cells to each half,
+                    // rounded up, so the key the two thumbs share is never the smaller for one of
+                    // them. The three-cell space therefore gives two cells to each hand, which is what
+                    // the landscape space bar is: two joined hexagons per side. The halves reach half
+                    // a cell further inward for it, and that comes out of the channel rather than the
+                    // cell, because the split's cell is decided by the available height.
                     spanCells(key.widthWeight) > 1 -> {
-                        leftKeys += key.copy(widthWeight = 1f)
-                        rightKeys += key.copy(widthWeight = 1f)
+                        val perHalf = (spanCells(key.widthWeight) + 1) / 2
+                        leftKeys += key.copy(widthWeight = perHalf.toFloat())
+                        rightKeys += key.copy(widthWeight = perHalf.toFloat())
                     }
                     // A single-cell key that straddles the cut stays whole, on its left edge's side.
                     else -> leftKeys += key

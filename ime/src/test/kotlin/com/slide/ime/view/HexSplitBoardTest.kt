@@ -22,8 +22,8 @@ import org.junit.Test
  * These are pure measurements — the same [HexBoard.place] the view calls, read back as numbers, with
  * no device in the loop. The numbers are pinned the way the ask gave them, with a px tolerance because
  * they are rounded: the exact cell is 486 / 3.0875 = 157.4089, so the ask's 157.42 is 0.011 high, its
- * 787.1 half is 787.045, its 112.16 pitch is 112.154, its 149.55 cap is 149.538, and its 747.3
- * channel is 747.206. The derived value is asserted directly beside the rounded one rather than
+ * 787.1 half is 787.045, its 112.16 pitch is 112.154, its 149.55 cap is 149.538, and its 668.5
+ * channel is 668.502. The derived value is asserted directly beside the rounded one rather than
  * adjusted to it, so a drift in either is caught.
  *
  * Portrait is asserted alongside, unchanged, so the split cannot leak into it: one board, 10 / 9 / 9 /
@@ -148,7 +148,7 @@ class HexSplitBoardTest {
     }
 
     @Test
-    fun `both space keys are one cell wide, one per half, and both type a space`() {
+    fun `both space keys are two cells wide, one per half, and both type a space`() {
         val board = landscapeBoard()
         val all = spaces(board)
 
@@ -156,8 +156,8 @@ class HexSplitBoardTest {
         all.forEach { space ->
             // Asserted on the key type, not the label: both are real SPACE keys.
             assertEquals(KeyType.SPACE, space.key.type)
-            assertEquals("one cell", 1f, space.key.widthWeight, 0.0001f)
-            assertEquals("one cell", board.cellWidth, space.width, 0.01f)
+            assertEquals("two cells", 2f, space.key.widthWeight, 0.0001f)
+            assertEquals("two cells", 2f * board.cellWidth, space.width, 0.01f)
             assertEquals(" ", space.key.outputText)
         }
         assertEquals("one in the left half", 1, leftHalf(board).count { it.key.type == KeyType.SPACE })
@@ -189,7 +189,7 @@ class HexSplitBoardTest {
     }
 
     @Test
-    fun `landscape numbers - flat 0_95, a 486 px block, two 787 px halves and a 747 px channel`() {
+    fun `landscape numbers - flat 0_95, a 486 px block, two 787 px halves and a 668 px channel`() {
         val available = HexBoard.cappedBoardHeight(displayWidth, displayHeight, landscape)
         val board = landscapeBoard()
         val cell = board.cellWidth
@@ -212,10 +212,11 @@ class HexSplitBoardTest {
         assertEquals(112.16f, HexBoard.cellHeight(cell, landscape), 0.5f)
         assertEquals(149.55f, HexBoard.capHeight(HexBoard.cellHeight(cell, landscape)), 0.5f)
 
-        // Each half is five cells from its own edge; the channel is what is left.
+        // Each half is five cells from its own edge, plus its row's half-cell phase; the channel is
+        // what is left. It narrowed by half a cell when the space bar became two hexagons per side.
         assertEquals(787.1f, HexBoard.SPLIT_COLUMNS_PER_HALF * cell, 0.5f)
         val channel = channelOf(board)
-        assertEquals(747.3f, channel.width, 0.5f)
+        assertEquals(668.5f, channel.width, 0.5f)
 
         // The board spans the viewport, so there is no side margin any more — the free width is the
         // channel, between the halves.
@@ -227,10 +228,11 @@ class HexSplitBoardTest {
         // or phase change moves both together.
         val halves = HexBoard.splitHalves(Layouts.HexQwertyEn)
         assertEquals(5.5f, halves.left.spanInCells, 0.0001f)
-        assertEquals(5.0f, halves.right.spanInCells, 0.0001f)
+        assertEquals(5.5f, halves.right.spanInCells, 0.0001f)
         // The layout-free fit rule carries the same width, so the halves cannot be drawn wider than
-        // the viewport holds: 10.5 cells, the halves' own spans and not a restated number.
-        assertEquals(10.5f, HexBoard.SPLIT_WIDTH_IN_CELLS, 0.0001f)
+        // the viewport holds: 11 cells — both halves now reach their five cells plus the row's
+        // half-cell phase, which is the space bar's second hexagon arriving on both sides.
+        assertEquals(11f, HexBoard.SPLIT_WIDTH_IN_CELLS, 0.0001f)
         assertEquals(halves.spanInCells, HexBoard.SPLIT_WIDTH_IN_CELLS, 0.0001f)
         assertEquals(HexBoard.SPLIT_WIDTH_IN_CELLS, HexBoard.widthInCells(landscape), 0f)
         assertEquals(HexBoard.COLUMNS.toFloat(), HexBoard.widthInCells(portrait), 0f)

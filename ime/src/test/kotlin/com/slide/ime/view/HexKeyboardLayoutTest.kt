@@ -302,7 +302,8 @@ class HexKeyboardLayoutTest {
         assertTrue("the app keeps more than half the height", displayHeight - board.boardHeight > displayHeight * 0.5f)
 
         // The approved split: two five-cell halves anchored to the two edges — 787.1 px each — with
-        // the empty 747.3 px channel between them. This replaced the single centred board's two
+        // the empty 668.5 px channel between them (half a cell narrower than before the space bar
+        // became two hexagons per side). This replaced the single centred board's two
         // 552.48 px side bands; the old band assertion is rewritten, not dropped, and the board now
         // spans the viewport instead of sitting in the middle of it.
         assertTrue(board.split)
@@ -310,7 +311,7 @@ class HexKeyboardLayoutTest {
         assertEquals(2400f, board.boardWidth, 0.01f)
         assertEquals(787.1f, HexBoard.SPLIT_COLUMNS_PER_HALF * cell, 0.5f)
         val channel = board.channel!!
-        assertEquals(747.3f, channel.width, 0.5f)
+        assertEquals(668.5f, channel.width, 0.5f)
         assertEquals(channel.start, board.keys.filter { it.centerX < channel.start }.maxOf { it.right }, 0.01f)
         assertEquals(channel.end, board.keys.filter { it.centerX > channel.end }.minOf { it.left }, 0.01f)
         // The screen's middle is dead space: a tap there is aimed at neither hand.
@@ -399,7 +400,8 @@ class HexKeyboardLayoutTest {
 
         val landscapeSpaces = landscapeBoard.keys.filter { it.key.type == KeyType.SPACE }
         assertEquals("landscape: two spaces, one per half", 2, landscapeSpaces.size)
-        landscapeSpaces.forEach { assertEquals(1f, it.key.widthWeight, 0.0001f) }
+        // Two cells each: the space bar is two joined hexagons per thumb, not one.
+        landscapeSpaces.forEach { assertEquals(2f, it.key.widthWeight, 0.0001f) }
     }
 
     @Test

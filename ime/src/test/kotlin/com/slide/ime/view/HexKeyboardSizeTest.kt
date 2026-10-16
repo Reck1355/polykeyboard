@@ -19,7 +19,7 @@ import org.junit.Test
  * stronger claim than "the default looks the same" and only the pinned numbers can carry it. The
  * default board's numbers are pinned as the earlier slices pinned them (portrait ratio 1.5 with a
  * 108 px cell, a 162 px cap and a 526.5 px block; landscape ratio 0.95 with a 486 px block, a
- * 157.40892 px cell, a 112.15385 px pitch, 787.04462 px halves and a 747.20630 px channel) and the
+ * 157.40892 px cell, a 112.15385 px pitch, 787.04462 px halves and a 668.50190 px channel) and the
  * step is added *around* them rather than through them, so a drifted ladder fails beside the numbers
  * it drifted from.
  *
@@ -133,7 +133,7 @@ class HexKeyboardSizeTest {
         assertEquals(157.40892f, cell, 0.001f)
         assertEquals(112.15385f, HexBoard.cellHeight(cell, landscape), 0.001f)
         assertEquals(787.04462f, HexBoard.SPLIT_COLUMNS_PER_HALF * cell, 0.001f)
-        assertEquals(747.20630f, split.channel?.width ?: 0f, 0.001f)
+        assertEquals(668.50190f, split.channel?.width ?: 0f, 0.001f)
     }
 
     @Test
@@ -238,7 +238,7 @@ class HexKeyboardSizeTest {
         val landscapeCell = listOf(125.92713f, 141.66802f, 157.40892f, 173.1498f, 188.89069f)
         val landscapePitch = listOf(89.72308f, 100.93846f, 112.15385f, 123.36923f, 134.58462f)
         val landscapeHalves = listOf(629.63563f, 708.34008f, 787.04462f, 865.74899f, 944.45344f)
-        val landscapeChannel = listOf(1077.76518f, 912.48583f, 747.20630f, 581.92713f, 416.64777f)
+        val landscapeChannel = listOf(1014.80170f, 841.65180f, 668.50190f, 495.35225f, 322.20240f)
 
         steps.forEachIndexed { index, step ->
             val portrait = portraitBoard(step)
@@ -350,14 +350,14 @@ class HexKeyboardSizeTest {
                 0.01f,
             )
 
-            // Both space hexagons, one per thumb, one cell each — the split's two-space bottom row,
-            // which the size ladder must not quietly fuse back into one bar.
+            // Both space hexagons, one per thumb, TWO cells each — the split's two-space bottom row,
+            // which the size ladder must not quietly fuse back into one bar or shrink to one cell.
             val allSpaces = spaces(board)
             assertEquals("step $step: two spaces", 2, allSpaces.size)
             allSpaces.forEach { space ->
                 assertEquals(KeyType.SPACE, space.key.type)
-                assertEquals("step $step: one cell", 1f, space.key.widthWeight, 0.0001f)
-                assertEquals("step $step: one cell wide", board.cellWidth, space.width, 0.01f)
+                assertEquals("step $step: two cells", 2f, space.key.widthWeight, 0.0001f)
+                assertEquals("step $step: two cells wide", 2f * board.cellWidth, space.width, 0.01f)
             }
             assertEquals("step $step: one space on the left", 1, left.count { it.key.type == KeyType.SPACE })
             assertEquals("step $step: one space on the right", 1, right.count { it.key.type == KeyType.SPACE })
