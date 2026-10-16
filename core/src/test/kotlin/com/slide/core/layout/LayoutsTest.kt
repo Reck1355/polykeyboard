@@ -9,6 +9,38 @@ import org.junit.Test
 class LayoutsTest {
 
     @Test
+    fun `every board names its own language on the space bar`() {
+        // The space bar is the one place the keyboard says which language it is: KeyboardView draws the
+        // board's own label there and nothing else. So a board copied from another language and stamped
+        // only with its tag told the user they were typing the language it was copied from, in the single
+        // place meant to answer that question. Asserted for every board and every language, and
+        // negatively too: a board may not be named for a language it is not, which is the half that
+        // would actually have caught this.
+        for (entry in KeyboardLanguages.SWITCHABLE) {
+            val boards = Layouts.boardsFor(entry.language)
+            val all = listOf(
+                "qwerty" to boards.qwerty,
+                "hex" to boards.hex,
+                "email" to boards.email,
+                "uri" to boards.uri,
+            )
+            for ((kind, board) in all) {
+                assertTrue(
+                    "${entry.language} $kind is labelled '${board.label}'",
+                    board.label.startsWith(entry.label),
+                )
+                for (other in KeyboardLanguages.SWITCHABLE) {
+                    if (other.language == entry.language) continue
+                    assertFalse(
+                        "${entry.language} $kind is labelled '${board.label}', another language's name",
+                        board.label.startsWith(other.label),
+                    )
+                }
+            }
+        }
+    }
+
+    @Test
     fun `number row is limited to compatible alphabetic layouts`() {
         assertEquals(Layouts.QwertyEn.rows.size + 1, Layouts.withNumberRow(Layouts.QwertyEn, true).rows.size)
         assertEquals(Layouts.EmailEn.rows.size + 1, Layouts.withNumberRow(Layouts.EmailEn, true).rows.size)

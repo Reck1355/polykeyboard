@@ -719,21 +719,39 @@ object Layouts {
      * added to one and not the other cannot compile a board table that disagrees with the
      * resolver: [boardsFor] falls back to the entries under [KeyboardLanguages.FALLBACK].
      */
+    /**
+     * The same boards, stamped for the language they will be used in.
+     *
+     * A board copied from another language has to carry that language's own two names, and it is the
+     * *label* that matters here rather than the tag. The space bar is the one place a keyboard says which
+     * language it is — `KeyboardView.drawSpaceLabel` draws this label there and nothing else — so a copy
+     * that renamed only its tag told the user, in the single place that is meant to answer the question,
+     * that they were typing the language it was copied from. The name comes from the registry rather than
+     * being spelled again here, so the board and the settings card say one thing.
+     */
+    private fun LanguageBoards.copiedFor(language: String): LanguageBoards {
+        val name = KeyboardLanguages.entryFor(language).label
+        fun KeyboardLayout.stamped() = copy(languageTag = language, label = name)
+        return LanguageBoards(
+            qwerty = qwerty.stamped(),
+            hex = hex.stamped(),
+            email = email.stamped(),
+            uri = uri.stamped(),
+        )
+    }
+
     private val BOARDS: Map<String, LanguageBoards> = mapOf(
         KeyboardLanguages.FALLBACK to LanguageBoards(QwertyEn, HexQwertyEn, HexEmailEn, HexUriEn),
         KeyboardLanguages.SPANISH to LanguageBoards(QwertyEs, HexQwertyEs, HexEmailEs, HexUriEs),
         // Mandarin needs no board of its own. Pinyin is typed on the letters a person already knows
         // the positions of, so the English boards are the Chinese boards, and the difference between
         // the two languages lives in how a keystroke is handled rather than in where the keys are.
-        // They are copies carrying the Chinese tag rather than the English boards themselves,
-        // because a board declares the language it is drawn for and a board that answered "en" here
-        // would be a second, quieter answer to the question this object exists to answer once.
-        KeyboardLanguages.CHINESE to LanguageBoards(
-            QwertyEn.copy(languageTag = KeyboardLanguages.CHINESE),
-            HexQwertyEn.copy(languageTag = KeyboardLanguages.CHINESE),
-            HexEmailEn.copy(languageTag = KeyboardLanguages.CHINESE),
-            HexUriEn.copy(languageTag = KeyboardLanguages.CHINESE),
-        ),
+        // They are copies stamped for Chinese rather than the English boards themselves, because a
+        // board declares the language it is drawn for — in its tag, which the resolver reads, and in
+        // its label, which its space bar draws. A copy carrying the tag alone announced English on a
+        // keyboard typing Chinese.
+        KeyboardLanguages.CHINESE to LanguageBoards(QwertyEn, HexQwertyEn, HexEmailEn, HexUriEn)
+            .copiedFor(KeyboardLanguages.CHINESE),
     )
 
     /**
