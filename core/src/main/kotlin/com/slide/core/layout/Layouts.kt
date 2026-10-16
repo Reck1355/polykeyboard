@@ -295,6 +295,73 @@ object Layouts {
     )
 
     /**
+     * The honeycomb's bottom row with one address delimiter in it (`@` for email, `/` for a URL).
+     *
+     * Nine cells exactly, like the letters board's own bottom row: the globe, `?123`, the delimiter
+     * where the comma sits, the three-cell space bar, the period, `.com` where the emoji key sits,
+     * and enter. The comma and the emoji are the two that give way, which is the same trade the
+     * stock address rows make, and the ten-column board is what stays: a row one cell wider would
+     * scale the whole honeycomb down to fit it.
+     */
+    private fun hexDelimiterRow(delimiter: String) = KeyRow(
+        listOf(
+            globe,
+            toSymbols.copy(widthWeight = 1f),
+            sym(delimiter),
+            space.copy(widthWeight = 3f),
+            period,
+            Key(".com", KeyType.CHARACTER, output = ".com", gestureEligible = false),
+            enter.copy(widthWeight = 1f),
+        ),
+        HEX_ROW_OFFSET,
+        HEX_ROW_OFFSET,
+    )
+
+    /**
+     * One delimiter row per mode, shared by both languages.
+     *
+     * The letters board shares its bottom row between English and Spanish for the same reason
+     * written above: nothing in it is a letter, so two copies that drifted apart would be a
+     * difference no language asked for.
+     */
+    private val hexEmailRow = hexDelimiterRow("@")
+
+    /** The URL delimiter row, shared by both languages. */
+    private val hexUriRow = hexDelimiterRow("/")
+
+    /**
+     * [HexQwertyEn] with the email row's delimiters.
+     *
+     * The stock keyboard answers an email field and a browser's address bar with its own
+     * rectangular boards, which is why the hex board disappeared exactly there: the two modes the
+     * outside world asks for most often were the two the honeycomb did not cover. These boards put
+     * `@` and `/` on the bottom row of the same honeycomb, so the mode a field asks for no longer
+     * changes the board's shape.
+     */
+    val HexEmailEn = HexQwertyEn.copy(
+        id = ID_HEX_EMAIL,
+        rows = HexQwertyEn.rows.dropLast(1) + hexEmailRow,
+    )
+
+    /** [HexEmailEn]'s URL counterpart, with `/` on the bottom row. */
+    val HexUriEn = HexQwertyEn.copy(
+        id = ID_HEX_URI,
+        rows = HexQwertyEn.rows.dropLast(1) + hexUriRow,
+    )
+
+    /** [HexEmailEn] in Spanish; the delimiters and the letter positions are identical. */
+    val HexEmailEs = HexQwertyEs.copy(
+        id = ID_HEX_EMAIL_ES,
+        rows = HexQwertyEs.rows.dropLast(1) + hexEmailRow,
+    )
+
+    /** [HexUriEs]'s counterpart, with `/` on the bottom row. */
+    val HexUriEs = HexQwertyEs.copy(
+        id = ID_HEX_URI_ES,
+        rows = HexQwertyEs.rows.dropLast(1) + hexUriRow,
+    )
+
+    /**
      * The honeycomb's half-key stagger, in width units — 0.5 cells, one half of a key.
      *
      * Named here rather than written as a `0.5f` in each row so the invariant the drawing depends
@@ -307,6 +374,18 @@ object Layouts {
 
     /** Layout id of [HexQwertyEs], its Spanish counterpart. */
     const val ID_HEX_QWERTY_ES = "hex_qwerty_es"
+
+    /** Layout id of [HexEmailEn]. */
+    const val ID_HEX_EMAIL = "hex_email_en"
+
+    /** Layout id of [HexUriEn]. */
+    const val ID_HEX_URI = "hex_uri_en"
+
+    /** Layout id of [HexEmailEs]. */
+    const val ID_HEX_EMAIL_ES = "hex_email_es"
+
+    /** Layout id of [HexUriEs]. */
+    const val ID_HEX_URI_ES = "hex_uri_es"
 
     private fun digit(value: String, alternates: List<String> = emptyList()) =
         Key(value, KeyType.CHARACTER, alternates = alternates, gestureEligible = false)
@@ -516,8 +595,8 @@ object Layouts {
      * resolver: [boardsFor] falls back to the entries under [KeyboardLanguages.FALLBACK].
      */
     private val BOARDS: Map<String, LanguageBoards> = mapOf(
-        KeyboardLanguages.FALLBACK to LanguageBoards(QwertyEn, HexQwertyEn, EmailEn, UriEn),
-        KeyboardLanguages.SPANISH to LanguageBoards(QwertyEs, HexQwertyEs, EmailEs, UriEs),
+        KeyboardLanguages.FALLBACK to LanguageBoards(QwertyEn, HexQwertyEn, HexEmailEn, HexUriEn),
+        KeyboardLanguages.SPANISH to LanguageBoards(QwertyEs, HexQwertyEs, HexEmailEs, HexUriEs),
     )
 
     /**
