@@ -104,15 +104,18 @@ class GestureAvailabilityTest {
                 panelShown = false,
             ),
         )
-        // Mandarin is where a swipe has nothing to be matched against, so it is refused and the
-        // general rule stands unchanged: no decoder, no gesture typing.
+        // Mandarin decodes too, against the pinyin table's keys rather than a word list. What the
+        // keyboard hands the factory here does not decide that: the language does, and the list is
+        // chosen at the call site (PinyinEngine.swipeLexicon). The general rule this test exists for
+        // still holds, and the null case above covers it: no decoder, no gesture typing.
         val chinese = KeyboardLanguages.resolve("zh_CN")
-        assertNull(GestureModels.deterministicDecoderFor(chinese, lexicon, null, null))
-        assertFalse(
+        val chineseDecoder = GestureModels.deterministicDecoderFor(chinese, lexicon, null, null)
+        assertNotNull(chineseDecoder)
+        assertTrue(
             GestureAvailability.available(
                 gestureTypingEnabled = true,
                 suggestionsAllowed = true,
-                decoder = null,
+                decoder = chineseDecoder,
                 alphaLayer = true,
                 panelShown = false,
             ),

@@ -28,6 +28,7 @@ object GestureModels {
     /** The one language the packaged swipe model was trained on. */
     const val ENGLISH = "en"
     const val SPANISH = "es"
+    const val MANDARIN = "zh"
 
     /** Every language with a swipe model in the shipped assets. */
     /**
@@ -40,9 +41,11 @@ object GestureModels {
      * not hold, so a few of them will be missed; a keyboard that decodes nothing at all misses all
      * of them, which is the worse of the two. Mandarin is absent for a real reason and not for want
      * of trying: a swipe there must land on a pinyin string rather than a word, and the word list it
-     * would be matched against is the key set of the pinyin table, which is a separate change.
+     * would be matched against is the key set of the pinyin table rather than a lexicon of words. That
+     * list now exists: PinyinEngine.swipeLexicon builds it from the table's own keys, so a swipe in
+     * Mandarin comes back as a romanisation and is answered by the same call a typed romanisation is.
      */
-    val LANGUAGES: Set<String> = setOf(ENGLISH, SPANISH)
+    val LANGUAGES: Set<String> = setOf(ENGLISH, SPANISH, MANDARIN)
 
     /** Whether a swipe can be decoded for [language] rather than guessed at. */
     fun supports(language: String): Boolean = language in LANGUAGES

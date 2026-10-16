@@ -19,13 +19,14 @@ class GestureModelsTest {
 
     @Test
     fun `the languages that can decode a swipe are exactly the ones with a word list`() {
-        assertEquals(setOf("en", "es"), GestureModels.LANGUAGES)
+        assertEquals(setOf("en", "es", "zh"), GestureModels.LANGUAGES)
         assertTrue(GestureModels.supports("en"))
         assertTrue(GestureModels.supports("es"))
-        // Mandarin is absent on purpose rather than by omission: a swipe there has to land on a
-        // pinyin string, and the list it would be matched against is the pinyin table's key set,
-        // which is a different change from shipping a lexicon.
-        assertFalse(GestureModels.supports("zh"))
+        // Mandarin decodes against the pinyin table's own keys rather than a lexicon of words, and that
+        // list now exists: PinyinEngine.swipeLexicon builds it. The two kinds of list are not
+        // interchangeable, so which one a language is matched against is the caller's decision and
+        // PinyinGlideTest pins the outcome the user sees.
+        assertTrue(GestureModels.supports("zh"))
         assertFalse(GestureModels.supports(""))
     }
 
@@ -36,9 +37,10 @@ class GestureModelsTest {
         // Spanish is decoded against the Spanish lexicon this build ships. The list is what the swipe
         // is matched to, so passing one here is the whole of what Spanish glide needs.
         assertNotNull(GestureModels.deterministicDecoderFor("es", lexicon, bigrams = null, trigrams = null))
-        // Mandarin has no list to match against, so it is refused outright rather than decoding
-        // English words onto a Chinese board.
-        assertNull(GestureModels.deterministicDecoderFor("zh", lexicon, bigrams = null, trigrams = null))
+        // The factory answers by language, not by which list it was handed: every language it lists
+        // gets a decoder. For Mandarin the caller passes PinyinEngine.swipeLexicon, so a swipe there
+        // cannot be answered with an English word even though this test hands it an English list.
+        assertNotNull(GestureModels.deterministicDecoderFor("zh", lexicon, bigrams = null, trigrams = null))
     }
 
     @Test
@@ -53,9 +55,10 @@ class GestureModelsTest {
         // that is the accepted cost of decoding something rather than nothing.
         assertEquals(KeyboardLanguages.SPANISH, KeyboardLanguages.resolve("es_ES"))
         assertTrue(GestureModels.supports(KeyboardLanguages.SPANISH))
-        // Mandarin is the one language this build declines to glide in, and the refusal is deliberate
-        // and named rather than a gap waiting to be filled by accident.
-        assertFalse(GestureModels.supports(KeyboardLanguages.CHINESE))
+        // Mandarin glides too, against the pinyin table's keys rather than a word list, so the gate is
+        // open for every language this build ships. The list is what differs, and it is chosen at the
+        // call site for exactly that reason.
+        assertTrue(GestureModels.supports(KeyboardLanguages.CHINESE))
         // And every language with a model is a language the resolver can return at all.
         assertTrue(KeyboardLanguages.SUPPORTED.containsAll(GestureModels.LANGUAGES))
     }

@@ -765,6 +765,14 @@ class SlideInputMethodService :
             // at all: a language with no trained model gets none, so a swipe cannot be answered
             // with another language's word. See GestureModels.
             val hasSwipeModel = GestureModels.supports(requested)
+            // Read before the block below rather than after it, because Mandarin's swipe decoder is built
+            // from the pinyin table's own keys: the table has to be in hand before the decoder that
+            // matches against it. Same coroutine, same IO dispatcher, same staleness check afterwards.
+            val pinyinEngineLoaded = if (requested == KeyboardLanguages.CHINESE) {
+                withContext(Dispatchers.IO) { PinyinEngine.load(applicationContext) }
+            } else {
+                null
+            }
             val (lexicon, bigrams, trigrams, decoder, trie) = withContext(Dispatchers.IO) {
                 val words = LexiconLoader.load(applicationContext, requested)
                 // The model is keyed by lexicon index, so it is worthless without the lexicon and
@@ -773,13 +781,20 @@ class SlideInputMethodService :
                 val pairs = words?.let { BigramLoader.load(applicationContext, requested, it) }
                 val triples = words?.let { TrigramLoader.load(applicationContext, requested, it) }
                 val trie = words?.let(::SwipeLexiconTrie)
-                val loadedDecoder = if (hasSwipeModel) {
+                val loadedDecoder = when {
+                    // Mandarin decodes against the pinyin table's keys, not a word list, because a swipe
+                    // there has to come back as a romanisation: the keyboard then answers it with the same
+                    // call it answers a typed romanisation with. Null here means the table itself failed to
+                    // read, which is already reported, and a language with no decoder simply does not glide.
+                    requested == KeyboardLanguages.CHINESE ->
+                        pinyinEngineLoaded?.let {
+                            GestureModels.deterministicDecoderFor(requested, it.swipeLexicon(), null, null)
+                        }
                     // GestureModels owns the model policy: it returns an engine only for a language
                     // whose swipe model actually shipped, and null otherwise, so a language without
                     // one cannot be typed at from an English word shape.
-                    words?.let { GestureModels.deterministicDecoderFor(requested, it, pairs, triples) }
-                } else {
-                    null
+                    hasSwipeModel -> words?.let { GestureModels.deterministicDecoderFor(requested, it, pairs, triples) }
+                    else -> null
                 }
                 LoadedLanguageResources(words, pairs, triples, loadedDecoder, trie)
             }
@@ -791,16 +806,20 @@ class SlideInputMethodService :
             // the one the caller has already moved to, not the one this coroutine started for.
             if (language != requested) return@launch
             // Mandarin's resources are not a lexicon: pinyin reads a word table keyed by romanisation
-            // and a language model, both inside the engine module. Read in this same coroutine and
-            // after the same staleness check, so a switch mid-read cannot publish the wrong language's
-            // engine, and so the first keystroke does not pay for reading it.
-            pinyinEngine = if (requested == KeyboardLanguages.CHINESE) {
-                withContext(Dispatchers.IO) { PinyinEngine.load(applicationContext) }
-            } else {
-                null
-            }
+            // and a language model, both inside the engine module. Read at the top of this coroutine and
+            // published here, after the same staleness check as everything else, so a switch mid-read
+            // cannot publish the wrong language's engine and the first keystroke does not pay for it.
+            pinyinEngine = pinyinEngineLoaded
+            // Published before the lexicon is tested, because Mandarin has no lexicon and still glides:
+            // it decodes against the pinyin table's keys, so a null lexicon there is the expected state
+            // rather than a reason to withhold the decoder. The suggester below does need a lexicon, so
+            // it stays where it was.
+            gestureDecoder = decoder
+            // Told here as well as inside the branch below, because this coroutine's last word on the
+            // subject is the one that counts: the decoder is published on a worker thread, and the
+            // refresh that ran when the user switched language saw the old one.
+            updateGestureAvailability()
             if (lexicon != null) {
-                gestureDecoder = decoder
                 typingSuggester = TypingSuggester(
                     lexicon,
                     bigrams = bigrams,
@@ -1615,12 +1634,36 @@ class SlideInputMethodService :
             null -> if (decoder is GestureDecoder) DecoderSource.FALLBACK else DecoderSource.UNKNOWN
         }
         val adapted = gestureAdaptation.rerank(raw)
+        // A swipe in Mandarin is decoded against the pinyin table's keys, so what comes back is a
+        // romanisation rather than a word: `nihao`, not 你好. The strip and the commit path both deal in
+        // words, so the keys are turned into the readings they stand for here, at the single point where
+        // a decoded candidate enters the keyboard. Everything downstream then behaves exactly as it does
+        // for any other language, and there is no second list to keep in step with the first.
+        val words = if (language == KeyboardLanguages.CHINESE) pinyinReadings(adapted) else adapted
         return DecodedGesture(
-            candidates = adapted,
+            candidates = words,
             source = source,
             latencyMillis = elapsedMillis(started),
-            confidence = gestureConfidence(adapted),
+            confidence = gestureConfidence(words),
         )
+    }
+
+    /**
+     * Turns a swipe's romanisations into the Chinese words they stand for.
+     *
+     * Deduplicated, because two keys can lead to the same word and a strip showing the same word twice is
+     * a strip that has quietly lost a choice. A key with no reading at all is dropped rather than passed
+     * on as roman letters, which is the one outcome the board must never show: pinyin the user would
+     * have to read as if it were the word.
+     */
+    private fun pinyinReadings(decoded: List<GestureCandidate>): List<GestureCandidate> {
+        val engine = pinyinEngine ?: return emptyList()
+        val seen = HashSet<String>()
+        return decoded.mapNotNull { candidate ->
+            val word = engine.keyboardCandidates(candidate.word, 1).firstOrNull() ?: return@mapNotNull null
+            if (!seen.add(word)) return@mapNotNull null
+            GestureCandidate(word, candidate.score)
+        }
     }
 
     private fun recordSwipeDecision(decoded: DecodedGesture, outcome: DecisionOutcome) {
