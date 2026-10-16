@@ -87,6 +87,43 @@ class BrandingTest {
 
     // region The name a person sees
 
+    /**
+     * The build that actually gets installed is the debug one, and it carries its own labels in a
+     * source set of its own. The first cut of this rename missed them, so the launcher still read
+     * "Slide Debug" while every test in this file was green: the strings a person reads and the
+     * strings these tests read were in different files. So scan the source sets rather than one
+     * file — any strings.xml that declares a launcher or keyboard-picker name is branding, and no
+     * branding string may carry the upstream name.
+     */
+    @Test
+    fun `every source set's launcher and picker label is the fork's`() {
+        val labelFiles = listOf(
+            "app/src/main/res/values/strings.xml",
+            "app/src/debug/res/values/strings.xml",
+            "ime/src/main/res/values/strings.xml",
+            "ime/src/debug/res/values/strings.xml",
+        )
+        labelFiles.forEach { assertTrue("$it is missing: a source set went unscanned", File(root, it).isFile) }
+
+        labelFiles.forEach { relative ->
+            val declared = strings(relative).filterKeys { it == "app_name" || it == "ime_name" }
+            assertTrue("$relative declares no launcher or picker name", declared.isNotEmpty())
+            declared.forEach { (key, value) ->
+                assertTrue(
+                    "$relative: $key reads \"$value\", which is not branded with the fork's name",
+                    value.startsWith(FORK),
+                )
+            }
+            val upstream = strings(relative).filterValues { UPSTREAM in it }
+            assertTrue("$relative still names the upstream app: $upstream", upstream.isEmpty())
+        }
+
+        // A debug build may say "Polykeyboard Debug" so it stays tellable apart from a release;
+        // what it may not do is keep calling itself Slide.
+        assertEquals("Polykeyboard Debug", strings("app/src/debug/res/values/strings.xml")["app_name"])
+        assertEquals("Polykeyboard Debug", strings("ime/src/debug/res/values/strings.xml")["ime_name"])
+    }
+
     @Test
     fun `the launcher and the keyboard picker show the fork's name`() {
         assertEquals(FORK, strings("app/src/main/res/values/strings.xml")["app_name"])

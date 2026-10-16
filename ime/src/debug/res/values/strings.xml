@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="ime_name">Slide Debug</string>
-    <string name="mic_permission_denied_permanently">Voice typing needs the microphone. Allow the Microphone permission for Slide Debug in Settings.</string>
+    <string name="ime_name">Polykeyboard Debug</string>
+    <string name="mic_permission_denied_permanently">Voice typing needs the microphone. Allow the Microphone permission for Polykeyboard Debug in Settings.</string>
 </resources>
