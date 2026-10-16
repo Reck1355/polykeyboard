@@ -1,20 +1,40 @@
-# Slide
+# Polykeyboard
 
 An Android keyboard built around two things Gboard does well and no open keyboard does at all:
 **gesture typing** with its own decoder, and **voice typing that runs entirely on your phone**
 via a local Whisper model.
 
-Slide is English-only. Typing and voice recognition work without a network connection; the optional
-GitHub update checker is the app's only network feature.
+**Polykeyboard is a fork of [Slide](https://github.com/Robertg761/Slide)** by Robertg761, and is
+licensed under the [Apache License 2.0](LICENSE) as the project it forked is. The original work,
+its licence and its third-party notices are kept in full; nothing was dropped. Everything on top
+of it was built by [Reck1355](https://github.com/Reck1355) with JadeSoul, and this repository is
+where those additions are published.
+
+**What the fork adds**
+
+- **Hexagonal keys** on a honeycomb lattice, instead of tiled rectangles.
+- A **two-handed split layout in landscape**, so a wide phone is typed with both thumbs.
+- An **adjustable key size** — five stops, from compact to large.
+- **Colour control**: the jade default, the built-in presets, or a seed of your own.
+- A **Spanish layout** beside the original English one, chosen per keyboard subtype.
+  Polykeyboard types in **English and Spanish** today; more languages are to come.
+- Offline **voice typing**, carried over from Slide and still entirely on-device.
+
+Typing and voice recognition work without a network connection; the optional GitHub update
+checker is the app's only network feature.
+
+The rest of this document is the upstream documentation, kept as it was. Where it describes the
+keyboard's design, its licence or its data provenance it is describing Slide's work, and that
+credit stays intact.
 
 ## Downloads and updates
 
 APK releases are published on this repository's [GitHub Releases](../../releases). Download the
 latest release APK, open it on an Android device, and allow the browser or file manager to
 install unknown apps when Android asks. Future APKs signed with the same release key install as
-updates over this one. Slide does not use Google Play.
+updates over this one. Polykeyboard does not use Google Play.
 
-Update checks are off by default. If enabled in Slide's settings, the app checks public GitHub
+Update checks are off by default. If enabled in Polykeyboard's settings, the app checks public GitHub
 releases (including prereleases when selected). It verifies the selected asset's published
 size and SHA-256, package, newer SemVer and 64-bit Android version code, and signing certificate
 when Android exposes it, then opens Android's normal installer for confirmation. Android itself
@@ -88,7 +108,7 @@ retries), swipe accuracy during a fresh install's calibration warm-up, and voice
 
 - **Clipboard and text-editing panels.** While the strip has no candidates it offers clipboard
   and edit shortcuts beside the settings gear, as Gboard's toolbar does. The clipboard panel
-  shows what was copied while Slide was running — unpinned items expire after an hour and never
+  shows what was copied while Polykeyboard was running — unpinned items expire after an hour and never
   leave memory, pinned items persist outside cloud backup, and clips a source marks sensitive
   are never recorded. The editing panel has hold-to-repeat arrows, a Select mode that makes the
   arrows extend the selection, Select all, Copy, Cut, Paste, and Delete, all driven through the
@@ -144,7 +164,7 @@ tools/fetch_model.sh small.en-q5_1
 The fetcher is pinned to Hugging Face revision
 `5359861c739e955e79d9a303bcbc70fb988958b1` and SHA-256
 `bfdff4894dcb76bbf647d56263ea2a96645423f1669176f4844a1bf8e478ad30`. Small English is the
-only packaged model. Slide accepts the larger install so conversational microphone input does not
+only packaged model. Polykeyboard accepts the larger install so conversational microphone input does not
 depend on Whisper Base's much narrower accuracy margin.
 
 **whisper.cpp** is vendored under `third_party/whisper.cpp` at a pinned commit, stripped of
@@ -218,7 +238,7 @@ Install and enable:
 adb install -r app/build/outputs/apk/debug/app-debug.apk
 ```
 
-Then open Slide and follow the two setup steps — enable it in the system keyboard list, then pick
+Then open Polykeyboard and follow the two setup steps — enable it in the system keyboard list, then pick
 it from the input-method switcher.
 
 ### Instrumented tests
@@ -237,14 +257,14 @@ Small English model. CI and release workflows run these suites on isolated API 2
 ## Privacy
 
 Nothing leaves the device during typing: speech is recognised locally, and audio is held in memory
-only for as long as it takes to transcribe. If the user enables update checks, Slide contacts the
+only for as long as it takes to transcribe. If the user enables update checks, Polykeyboard contacts the
 public GitHub Releases API when settings opens with checks enabled, when checks are enabled or the
 prerelease preference changes, and when **Check now** is tapped. Password, email,
 URL, no-suggestions, and incognito fields are
-excluded from learning. A manual Incognito mode in Slide's settings stops learning in every app
+excluded from learning. A manual Incognito mode in Polykeyboard's settings stops learning in every app
 without hiding ordinary language suggestions.
 
-Slide learns the words you use that its dictionary does not have, so it stops rewriting your own
+Polykeyboard learns the words you use that its dictionary does not have, so it stops rewriting your own
 name back at you, and the phrases you repeat, so it can offer them. Those live in
 `files/learned_words.txt` and `files/learned_pairs.txt` in the app's private storage, as plain text
 you can read or delete, and are excluded from cloud backup and device transfer alike —
@@ -269,5 +289,5 @@ models are derived from [Tatoeba](https://tatoeba.org) sentence data, used and r
 CC BY 2.0 FR; emoji data and search keywords come from Unicode and CLDR under the Unicode licence;
 Whisper weights and `whisper.cpp` are MIT. Emoji are drawn with the system font, so no glyphs are
 redistributed. The packaged terms and notices, including attribution and licence links, are
-available under **Licences and notices** in Slide's settings and at
+available under **Licences and notices** in Polykeyboard's settings and at
 `app/src/main/assets/THIRD_PARTY_NOTICES.txt`.

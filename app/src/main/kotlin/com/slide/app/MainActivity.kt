@@ -188,8 +188,8 @@ private fun SetupScreen(repository: SettingsRepository) {
             InstallOutcome.Handed -> availableUpdate = null
             InstallOutcome.NeedsPermission -> {
                 availableUpdate = null
-                updateMessage = "Allow Slide to install apps, then tap Check now again to finish " +
-                    "updating."
+                updateMessage = "Allow Polykeyboard to install apps, then tap Check now again to " +
+                    "finish updating."
             }
             // The button is disabled while a download runs, so this is a stale tap at worst. The
             // dialog is already saying "Downloading…"; leave it be.
@@ -202,8 +202,8 @@ private fun SetupScreen(repository: SettingsRepository) {
                 availableUpdate = null
                 updateMessage = "Update download failed: " +
                     (finished.message ?: "unknown error") +
-                    "\n\nYou can also download the APK from the Slide releases page on GitHub and " +
-                    "install it by hand."
+                    "\n\nYou can also download the APK from the Polykeyboard releases page on " +
+                    "GitHub and install it by hand."
             }
         }
         UpdateManager.consumeOutcome()
@@ -330,7 +330,7 @@ private fun SetupScreen(repository: SettingsRepository) {
                 .padding(20.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-            Text("Slide", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.SemiBold)
+            Text("Polykeyboard", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.SemiBold)
             Text(
                 "A gesture-first keyboard with fully on-device voice typing.",
                 style = MaterialTheme.typography.bodyMedium,
@@ -339,8 +339,8 @@ private fun SetupScreen(repository: SettingsRepository) {
 
             StepCard(
                 step = 1,
-                title = "Enable Slide",
-                subtitle = if (enabled) "Enabled in system settings." else "Turn Slide on in the keyboard list.",
+                title = "Enable Polykeyboard",
+                subtitle = if (enabled) "Enabled in system settings." else "Turn Polykeyboard on in the keyboard list.",
                 done = enabled,
                 actionLabel = "Open keyboard settings",
                 onAction = {
@@ -350,8 +350,8 @@ private fun SetupScreen(repository: SettingsRepository) {
 
             StepCard(
                 step = 2,
-                title = "Switch to Slide",
-                subtitle = if (selected) "Slide is your active keyboard." else "Pick Slide from the input method picker.",
+                title = "Switch to Polykeyboard",
+                subtitle = if (selected) "Polykeyboard is your active keyboard." else "Pick Polykeyboard from the input method picker.",
                 done = selected,
                 actionLabel = "Choose input method",
                 enabledAction = enabled,
@@ -530,14 +530,14 @@ private fun SetupScreen(repository: SettingsRepository) {
                     SettingSwitch(
                         label = "Incognito mode",
                         checked = settings.incognitoModeEnabled,
-                        description = "Stops Slide from learning new words, phrases, and per-key touch calibration. Existing learned data stays until you clear it.",
+                        description = "Stops Polykeyboard from learning new words, phrases, and per-key touch calibration. Existing learned data stays until you clear it.",
                     ) { value ->
                         scope.launch {
                             repository.update { it.copy(incognitoModeEnabled = value) }
                         }
                     }
                     Text(
-                        "Slide keeps learned words, phrases, and per-key touch calibration only on this device.",
+                        "Polykeyboard keeps learned words, phrases, and per-key touch calibration only on this device.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -555,8 +555,8 @@ private fun SetupScreen(repository: SettingsRepository) {
                     Text("Voice typing", style = MaterialTheme.typography.titleMedium)
                     Text(
                         "Speech is recognised on this device. Microphone audio is kept only in " +
-                            "memory while Slide transcribes it; audio and transcripts are not sent " +
-                            "to a server by Slide.",
+                            "memory while Polykeyboard transcribes it; audio and transcripts are " +
+                            "not sent to a server by Polykeyboard.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -566,8 +566,8 @@ private fun SetupScreen(repository: SettingsRepository) {
                     val model = WhisperModel.fromId(settings.voiceModelId)
                     Text(model.label, style = MaterialTheme.typography.bodyLarge)
                     Text(
-                        "${model.description} Slide packages one verified model and runs it " +
-                            "entirely on this device.",
+                        "${model.description} Polykeyboard packages one verified model and runs " +
+                            "it entirely on this device.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -577,7 +577,7 @@ private fun SetupScreen(repository: SettingsRepository) {
             Card(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("Updates", style = MaterialTheme.typography.titleMedium)
-                    Text("Slide contacts GitHub when settings opens with update checks enabled, when you enable checks or change prerelease inclusion, and when you tap Check now. Android always confirms installation.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("Polykeyboard contacts GitHub when settings opens with update checks enabled, when you enable checks or change prerelease inclusion, and when you tap Check now. Android always confirms installation.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     SettingSwitch("Check GitHub for updates", settings.updateChecksEnabled) { value -> scope.launch { repository.update { it.copy(updateChecksEnabled = value) } } }
                     if (settings.updateChecksEnabled && autoCheckFailed) {
                         Text(
@@ -601,7 +601,17 @@ private fun SetupScreen(repository: SettingsRepository) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("About", style = MaterialTheme.typography.titleMedium)
                     Text(
-                        "Slide is Apache-2.0 licensed and includes open-source software and " +
+                        AboutCopy.PITCH,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Text(
+                        AboutCopy.FORK_NOTE,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Text(
+                        "Polykeyboard is Apache-2.0 licensed and includes open-source software and " +
                             "public language data. Gesture typing is powered by FUTO Swipe technology.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -640,7 +650,7 @@ private fun SetupScreen(repository: SettingsRepository) {
                 if (downloading) UpdateManager.cancelInstall()
                 availableUpdate = null
             },
-            title = { Text("Slide ${update.version} is available") },
+            title = { Text("Polykeyboard ${update.version} is available") },
             text = {
                 Text(
                     if (downloading) {
@@ -648,10 +658,10 @@ private fun SetupScreen(repository: SettingsRepository) {
                         val totalMb = update.apkSize / BYTES_PER_MB
                         val percent =
                             if (update.apkSize > 0) downloadedBytes * 100 / update.apkSize else 0
-                        "Downloading Slide ${update.version}: $downloadedMb of $totalMb MB " +
+                        "Downloading Polykeyboard ${update.version}: $downloadedMb of $totalMb MB " +
                             "($percent%). Android will ask you to confirm the installation."
                     } else {
-                        update.notes.ifBlank { "A newer signed Slide release is available." }
+                        update.notes.ifBlank { "A newer signed Polykeyboard release is available." }
                     },
                 )
             },
@@ -682,7 +692,7 @@ private fun SetupScreen(repository: SettingsRepository) {
             title = { Text("Clear learned data?") },
             text = {
                 Text(
-                    "Slide will forget the personal words, word pairs, and per-key touch " +
+                    "Polykeyboard will forget the personal words, word pairs, and per-key touch " +
                         "calibration it learned from your typing. This cannot be undone.",
                 )
             },

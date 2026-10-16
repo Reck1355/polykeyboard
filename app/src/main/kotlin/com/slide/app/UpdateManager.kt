@@ -81,9 +81,9 @@ sealed interface InstallOutcome {
 }
 
 object UpdateManager {
-    private const val RELEASES = "https://api.github.com/repos/Robertg761/Slide/releases?per_page=100"
+    private const val RELEASES = "https://api.github.com/repos/Reck1355/polykeyboard/releases?per_page=100"
     private const val RELEASES_HOST = "api.github.com"
-    private const val RELEASES_PATH = "/repos/Robertg761/Slide/releases"
+    private const val RELEASES_PATH = "/repos/Reck1355/polykeyboard/releases"
     private const val MAX_RELEASE_PAGES = 20
     private const val MAX_RELEASE_PAGE_CHARS = 8 * 1024 * 1024
     private const val MAX_RELEASE_NOTES_CHARS = 16 * 1024
@@ -734,10 +734,10 @@ object UpdateManager {
             ?: error("Android could not read the downloaded APK. Please try again.")
 
         require(candidate.packageName == context.packageName) {
-            "The downloaded file is not Slide"
+            "The downloaded file is not Polykeyboard"
         }
         require(candidate.versionName == expectedVersion) {
-            "Expected Slide $expectedVersion but the download is ${candidate.versionName}"
+            "Expected Polykeyboard $expectedVersion but the download is ${candidate.versionName}"
         }
 
         val installed = packageInfo(pm, context.packageName, 0)
@@ -770,7 +770,7 @@ object UpdateManager {
             return
         }
         require(signerLineageAccepts(installedSigners, candidateHistory)) {
-            "Downloaded APK is not signed by Slide's release key"
+            "Downloaded APK is not signed by Polykeyboard's release key"
         }
     }
 

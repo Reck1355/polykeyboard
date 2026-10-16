@@ -1815,10 +1815,10 @@ class KeyboardView @JvmOverloads constructor(
             ShiftState.LOCKED -> "caps lock on"
         }
         return if (searchMode) {
-            "Slide keyboard, emoji search. ${if (searchQuery.isEmpty()) "Search field empty" else "Search: $searchQuery"}. " +
+            "Polykeyboard keyboard, emoji search. ${if (searchQuery.isEmpty()) "Search field empty" else "Search: $searchQuery"}. " +
                 "${searchResults.size} results. Swipe across the keys to enter a search term."
         } else {
-            "Slide keyboard, $layer, $shift. Double tap Shift for caps lock. Swipe Space to move the cursor."
+            "Polykeyboard keyboard, $layer, $shift. Double tap Shift for caps lock. Swipe Space to move the cursor."
         }
     }
 

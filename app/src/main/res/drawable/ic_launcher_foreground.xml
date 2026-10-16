@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- A swipe path tracing across three key dots — the gesture the app is named for. -->
+<!-- Polykeyboard: seven hexagons, one rust - the honeycomb the keys are cut from. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp"
     android:height="108dp"
@@ -7,20 +7,25 @@
     android:viewportHeight="108">
 
     <path
-        android:pathData="M32,44 C40,30 52,66 60,52 C66,42 72,40 78,46"
-        android:strokeColor="#FFFFFF"
-        android:strokeWidth="5"
-        android:strokeLineCap="round"
-        android:strokeLineJoin="round" />
-
+        android:pathData="M54.000,47.512 L59.619,50.756 L59.619,57.244 L54.000,60.488 L48.381,57.244 L48.381,50.756 Z"
+        android:fillColor="#3A947C" />
     <path
-        android:pathData="M32,44 m-4,0 a4,4 0 1,0 8,0 a4,4 0 1,0 -8,0"
-        android:fillColor="#FFFFFF" />
+        android:pathData="M54.000,23.804 L64.158,29.669 L64.158,41.398 L54.000,47.262 L43.842,41.398 L43.842,29.669 Z"
+        android:fillColor="#1F6F5C" />
     <path
-        android:pathData="M60,52 m-4,0 a4,4 0 1,0 8,0 a4,4 0 1,0 -8,0"
-        android:fillColor="#FFFFFF" />
+        android:pathData="M72.342,33.038 L82.500,38.902 L82.500,50.631 L72.342,56.496 L62.185,50.631 L62.185,38.902 Z"
+        android:fillColor="#17564A" />
     <path
-        android:pathData="M78,46 m-4,0 a4,4 0 1,0 8,0 a4,4 0 1,0 -8,0"
-        android:fillColor="#FFFFFF" />
+        android:pathData="M72.342,51.504 L82.500,57.369 L82.500,69.098 L72.342,74.962 L62.185,69.098 L62.185,57.369 Z"
+        android:fillColor="#A8452B" />
+    <path
+        android:pathData="M54.000,60.738 L64.158,66.602 L64.158,78.331 L54.000,84.196 L43.842,78.331 L43.842,66.602 Z"
+        android:fillColor="#17564A" />
+    <path
+        android:pathData="M35.658,51.504 L45.815,57.369 L45.815,69.098 L35.658,74.962 L25.500,69.098 L25.500,57.369 Z"
+        android:fillColor="#17564A" />
+    <path
+        android:pathData="M35.658,33.038 L45.815,38.902 L45.815,50.631 L35.658,56.496 L25.500,50.631 L25.500,38.902 Z"
+        android:fillColor="#17564A" />
 
 </vector>

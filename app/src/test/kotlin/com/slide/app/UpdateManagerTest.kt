@@ -162,8 +162,8 @@ class UpdateManagerTest {
 
     @Test
     fun `release pagination follows only the expected GitHub endpoint`() {
-        val next = "https://api.github.com/repos/Robertg761/Slide/releases?per_page=100&page=2"
-        val header = "<$next>; rel=\"next\", <https://api.github.com/repos/Robertg761/Slide/releases?per_page=100&page=4>; rel=\"last\""
+        val next = "https://api.github.com/repos/Reck1355/polykeyboard/releases?per_page=100&page=2"
+        val header = "<$next>; rel=\"next\", <https://api.github.com/repos/Reck1355/polykeyboard/releases?per_page=100&page=4>; rel=\"last\""
 
         assertEquals(next, UpdateManager.nextReleasePage(header)?.toExternalForm())
         assertEquals(null, UpdateManager.nextReleasePage(null))
@@ -173,7 +173,7 @@ class UpdateManagerTest {
     @Test(expected = java.io.IOException::class)
     fun `release pagination rejects an off-origin next link`() {
         UpdateManager.nextReleasePage(
-            "<https://example.test/repos/Robertg761/Slide/releases?page=2>; rel=\"next\"",
+            "<https://example.test/repos/Reck1355/polykeyboard/releases?page=2>; rel=\"next\"",
         )
     }
 
