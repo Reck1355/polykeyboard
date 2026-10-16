@@ -15,8 +15,8 @@ android {
         applicationId = "com.slide"
         minSdk = 26
         targetSdk = 37
-        versionCode = 19
-        versionName = "0.5.4"
+        versionCode = 20
+        versionName = "0.1"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
