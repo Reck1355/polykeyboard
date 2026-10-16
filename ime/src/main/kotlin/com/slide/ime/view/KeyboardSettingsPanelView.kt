@@ -17,6 +17,7 @@ import android.widget.SeekBar
 import android.widget.Switch
 import android.widget.TextView
 import androidx.core.graphics.ColorUtils
+import com.slide.core.settings.ClassicKeyboard
 import com.slide.core.settings.KeyboardSettings
 import com.slide.core.theme.ColourPreset
 import com.slide.core.theme.Colours
@@ -140,17 +141,6 @@ class KeyboardSettingsPanelView(context: Context) : LinearLayout(context) {
         }
 
         addSection(body, "Appearance and feedback")
-        addToggle(body, "Number row", read = { it.showNumberRow }) { value, checked ->
-            value.copy(showNumberRow = checked)
-        }
-        addSlider(
-            body,
-            "Keyboard height",
-            valueRange = 0.7f..1.4f,
-            steps = 6,
-            read = { it.keyHeightScale },
-            formatValue = { "${(it * 100).toInt()}%" },
-        ) { value, chosen -> value.copy(keyHeightScale = chosen) }
         addSlider(
             body,
             "Space below keys",
@@ -189,6 +179,26 @@ class KeyboardSettingsPanelView(context: Context) : LinearLayout(context) {
             formatValue = { "${(it * 100).toInt()}%" },
             enabledWhen = { it.soundEnabled },
         ) { value, chosen -> value.copy(soundVolume = chosen) }
+
+        addSection(body, ClassicKeyboard.GROUP_TITLE)
+        addNote(body, ClassicKeyboard.HEX_BOARD_REASON)
+        // The stock keyboard's two controls, off while the hex board is the board on screen, and
+        // saying so instead of sitting silently inert beside the control that does resize it.
+        addToggle(
+            body,
+            "Number row",
+            read = { it.showNumberRow },
+            enabledWhen = { ClassicKeyboard.controlsApply() },
+        ) { value, checked -> value.copy(showNumberRow = checked) }
+        addSlider(
+            body,
+            "Keyboard height",
+            valueRange = 0.7f..1.4f,
+            steps = 6,
+            read = { it.keyHeightScale },
+            formatValue = { "${(it * 100).toInt()}%" },
+            enabledWhen = { ClassicKeyboard.controlsApply() },
+        ) { value, chosen -> value.copy(keyHeightScale = chosen) }
 
         addSection(body, "Privacy")
         addToggle(
@@ -252,6 +262,14 @@ class KeyboardSettingsPanelView(context: Context) : LinearLayout(context) {
             primaryLabel(title, 13f, bold = true).apply {
                 setPadding(dp(8f), dp(12f), dp(8f), dp(6f))
             },
+            LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT),
+        )
+    }
+
+    /** One line of explanation under a section title, for a group whose controls carry a reason. */
+    private fun addNote(parent: LinearLayout, text: String) {
+        parent.addView(
+            secondaryLabel(text).apply { setPadding(dp(8f), 0, dp(8f), dp(6f)) },
             LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT),
         )
     }

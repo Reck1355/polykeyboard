@@ -76,6 +76,7 @@ import com.slide.asr.WhisperModel
 import com.slide.core.layout.Key
 import com.slide.core.layout.KeyType
 import com.slide.core.layout.Layouts
+import com.slide.core.settings.ClassicKeyboard
 import com.slide.core.settings.KeyboardSettings
 import com.slide.core.settings.KeyboardSize
 import com.slide.core.settings.SettingsRepository
@@ -427,22 +428,6 @@ private fun SetupScreen(repository: SettingsRepository) {
                     ) { value ->
                         scope.launch { repository.update { it.copy(doubleSpacePeriod = value) } }
                     }
-                    SettingSwitch("Number row", settings.showNumberRow) { value ->
-                        scope.launch { repository.update { it.copy(showNumberRow = value) } }
-                    }
-                    SettingSlider(
-                        label = "Keyboard height",
-                        value = keyHeight,
-                        valueLabel = "${(keyHeight * 100).roundToInt()}%",
-                        valueRange = 0.7f..1.4f,
-                        steps = 6,
-                        onValueChange = { keyHeight = it },
-                        onValueChangeFinished = {
-                            scope.launch {
-                                repository.update { it.copy(keyHeightScale = keyHeight) }
-                            }
-                        },
-                    )
                     SettingSlider(
                         label = "Keyboard size",
                         value = keyboardSizeStep.toFloat(),
@@ -468,6 +453,42 @@ private fun SetupScreen(repository: SettingsRepository) {
                     // one stored choice — and asks the board's own geometry for its shape, so what
                     // is shown is the board the keyboard will draw, not a picture of one.
                     KeyboardSizePreview(step = keyboardSizeStep, colours = boardColours)
+                    // The stock keyboard's two controls, in a group of their own and saying why they
+                    // are off. They used to sit above "Keyboard size" with nothing to distinguish
+                    // them, so the height slider looked broken when it was only inapplicable: the
+                    // hex board takes its height from the ladder above and its digits from ?123.
+                    // Nothing is removed, so the group is a label rather than a loss.
+                    Text(
+                        ClassicKeyboard.GROUP_TITLE,
+                        style = MaterialTheme.typography.titleSmall,
+                        modifier = Modifier.padding(top = 12.dp),
+                    )
+                    Text(
+                        ClassicKeyboard.HEX_BOARD_REASON,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    SettingSwitch(
+                        label = "Number row",
+                        checked = settings.showNumberRow,
+                        enabled = ClassicKeyboard.controlsApply(),
+                    ) { value ->
+                        scope.launch { repository.update { it.copy(showNumberRow = value) } }
+                    }
+                    SettingSlider(
+                        label = "Keyboard height",
+                        value = keyHeight,
+                        valueLabel = "${(keyHeight * 100).roundToInt()}%",
+                        valueRange = 0.7f..1.4f,
+                        steps = 6,
+                        enabled = ClassicKeyboard.controlsApply(),
+                        onValueChange = { keyHeight = it },
+                        onValueChangeFinished = {
+                            scope.launch {
+                                repository.update { it.copy(keyHeightScale = keyHeight) }
+                            }
+                        },
+                    )
                     SettingSlider(
                         label = "Space below keys",
                         value = bottomPadding,
