@@ -96,6 +96,7 @@ EXPECTED_NATIVE_PATHS=(
     lib/x86_64/libslide_asr.so
 )
 EXPECTED_RUNTIME_DATA_PATHS=(
+    assets/THIRD_PARTY_NOTICES.txt
     assets/bigrams_en.bin
     assets/bigrams_es.bin
     assets/emoji.bin
@@ -106,6 +107,7 @@ EXPECTED_RUNTIME_DATA_PATHS=(
     assets/pinyin/bigrams.bin
     assets/pinyin/dict.bin
     assets/pinyin/syllables.txt
+    assets/swipe/FUTO_MODEL_LICENSE.md
     assets/swipe/decoder.pte
     assets/swipe/encoder.pte
     assets/trigrams_en.bin
@@ -397,11 +399,17 @@ verify_stored_asset "$TRIGRAM_PATH" "$TRIGRAM_SHA256"
 # A reviewed release carries exactly these model/data payloads. Hashing the expected files alone
 # is insufficient: an accidentally bundled experimental model would otherwise be signed and
 # attested without appearing in the release contract or SBOM.
+#
+# The reader must be able to see every extension the manifest names, or the expectation becomes
+# unsatisfiable and the contract fails on a correct build. The pinyin engine ships its syllable table
+# as a `.txt` and its licence record as a `.md`, both of them runtime payloads rather than source.
+# Widening the filter rather than dropping those two entries keeps the licence file under the
+# contract, and makes a stray document in assets a failure rather than an invisible extra.
 # Read indirectly through verify_exact_manifest's nameref.
 # shellcheck disable=SC2034
 mapfile -t runtime_data_paths < <(
     unzip -Z1 "$APK" \
-        | awk '/^assets\/.*[.](bin|pte|onnx|tflite|lite|pt|pth|gguf|model)$/' \
+        | awk '/^assets\/.*[.](bin|pte|onnx|tflite|lite|pt|pth|gguf|model|txt|md)$/' \
         | LC_ALL=C sort
 )
 verify_exact_manifest "runtime model/data" EXPECTED_RUNTIME_DATA_PATHS runtime_data_paths
