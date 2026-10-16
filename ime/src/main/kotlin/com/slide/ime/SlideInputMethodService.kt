@@ -670,6 +670,11 @@ class SlideInputMethodService :
      * board exactly as it is.
      */
     private fun alignSubtypeWith(tag: String) {
+        // `switchInputMethod` is API 28 and this keyboard runs from API 26, so the nudge is skipped
+        // outright below that. Nothing is lost by skipping it: the language has already switched on
+        // this keyboard, and this method's whole job is to stop the platform's own list from
+        // disagreeing with a board that is already correct.
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.P) return
         val manager = getSystemService(Context.INPUT_METHOD_SERVICE) as? InputMethodManager ?: return
         // This service is the input method being switched within, so its own component is the id
         // `switchInputMethod` wants: a switch to a subtype of some other keyboard would be a switch
