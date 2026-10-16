@@ -65,6 +65,18 @@ data class KeyboardSettings(
      * dark mode" while controlling only a fallback almost nobody ever hits.
      */
     val followSystemDarkMode: Boolean = true,
+    /**
+     * The language the user chose, as a subtype tag (`en-US`, `es-ES`), or empty before they have
+     * chosen one.
+     *
+     * This is the keyboard's own answer to "which language am I typing in", and it exists because
+     * Android's keyboard-language list is not a control a person can find: a subtype declared in
+     * `method.xml` is not enabled until the user ticks it in a settings screen three levels deep,
+     * so the globe key and the board had nothing to switch between. Empty is not English: it means
+     * no choice has been made, and the reported subtype decides — which keeps a fresh install, and
+     * an install that has only ever used one language, behaving exactly as before.
+     */
+    val languageTag: String = "",
     val showKeyBorders: Boolean = false,
     val showKeyPreview: Boolean = true,
     val showNumberRow: Boolean = true,
@@ -269,7 +281,7 @@ private val LEGACY_SETTINGS_MIGRATION_COMPLETE =
 
 /** Preferences keys are name-based, so validate the erased value before copying the legacy key. */
 internal fun isBackupEligibleSetting(name: String, value: Any): Boolean = when (name) {
-    "theme_id", "voice_model", "colour_preset_id" -> value is String
+    "theme_id", "voice_model", "colour_preset_id", "language_tag" -> value is String
     "key_height_scale", "bottom_padding_dp", "haptic_strength", "sound_volume" -> value is Float
     "colour_seed_hue", "colour_seed_saturation", "colour_seed_lightness" -> value is Float
     "learned_data_clear_epoch" -> value is Long
@@ -586,6 +598,7 @@ private object Keys {
     val COLOUR_SEED_SATURATION = floatPreferencesKey("colour_seed_saturation")
     val COLOUR_SEED_LIGHTNESS = floatPreferencesKey("colour_seed_lightness")
     val FOLLOW_SYSTEM_DARK = booleanPreferencesKey("follow_system_dark")
+    val LANGUAGE_TAG = stringPreferencesKey("language_tag")
     val KEY_BORDERS = booleanPreferencesKey("key_borders")
     val KEY_PREVIEW = booleanPreferencesKey("key_preview")
     val NUMBER_ROW = booleanPreferencesKey("number_row")
@@ -618,6 +631,7 @@ internal fun MutablePreferences.writeKeyboardSettings(updated: KeyboardSettings)
     this[Keys.COLOUR_SEED_SATURATION] = updated.colourSeedSaturation
     this[Keys.COLOUR_SEED_LIGHTNESS] = updated.colourSeedLightness
     this[Keys.FOLLOW_SYSTEM_DARK] = updated.followSystemDarkMode
+    this[Keys.LANGUAGE_TAG] = updated.languageTag
     this[Keys.KEY_BORDERS] = updated.showKeyBorders
     this[Keys.KEY_PREVIEW] = updated.showKeyPreview
     this[Keys.NUMBER_ROW] = updated.showNumberRow
@@ -651,6 +665,7 @@ internal fun Preferences.toKeyboardSettings(): KeyboardSettings {
         colourSeedSaturation = boundedFloat(Keys.COLOUR_SEED_SATURATION, defaults.colourSeedSaturation, 0f..1f),
         colourSeedLightness = boundedFloat(Keys.COLOUR_SEED_LIGHTNESS, defaults.colourSeedLightness, 0f..1f),
         followSystemDarkMode = this[Keys.FOLLOW_SYSTEM_DARK] ?: defaults.followSystemDarkMode,
+        languageTag = this[Keys.LANGUAGE_TAG] ?: defaults.languageTag,
         showKeyBorders = this[Keys.KEY_BORDERS] ?: defaults.showKeyBorders,
         showKeyPreview = this[Keys.KEY_PREVIEW] ?: defaults.showKeyPreview,
         showNumberRow = this[Keys.NUMBER_ROW] ?: defaults.showNumberRow,

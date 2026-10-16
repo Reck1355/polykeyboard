@@ -51,6 +51,18 @@ class HexBoardPlacementDumpTest {
     private val portraitUri = portrait.copy(name = "portrait-uri", layout = Layouts.HexUriEn)
 
     /**
+     * The `?123` page, in both orientations.
+     *
+     * It is a fixture of its own because the symbols pages are the newest two boards and the ones
+     * whose shape is most easily taken for granted: the first report of the honeycomb disappearing
+     * was here, and a page that is hex-shaped but has a row one cell too long would push itself off
+     * the board rather than looking wrong.
+     */
+    private val portraitSymbols = portrait.copy(name = "portrait-symbols", layout = Layouts.HexSymbolsEn)
+    private val landscapeSymbols =
+        landscape.copy(name = "landscape-symbols", layout = Layouts.HexSymbolsEn)
+
+    /**
      * What the view hands the board in landscape: the display is 1080 px tall and the board may take
      * no more of it than [HexBoard.LANDSCAPE_HEIGHT_FRACTION], which is the cap the *view* is measured
      * to. Passing the whole display height here instead was the bug this test was born from — with
@@ -111,6 +123,8 @@ class HexBoardPlacementDumpTest {
         // The address boards once each at the default step: enough to draw them beside portrait.
         cases += portraitEmail to KeyboardSize.DEFAULT_STEP
         cases += portraitUri to KeyboardSize.DEFAULT_STEP
+        cases += portraitSymbols to KeyboardSize.DEFAULT_STEP
+        cases += landscapeSymbols to KeyboardSize.DEFAULT_STEP
         cases.forEachIndexed { index, (screen, step) ->
             val placement = place(screen, step)
             out.append("  {\"screen\":\"${screen.name}\",\"step\":$step,")
@@ -122,7 +136,11 @@ class HexBoardPlacementDumpTest {
             out.append("\"channelEnd\":${placement.channel?.end ?: -1f},\"keys\":[")
             placement.keys.forEachIndexed { keyIndex, placed ->
                 if (keyIndex > 0) out.append(",")
-                out.append("{\"label\":\"${placed.key.label.replace("\"", "'")}\",")
+                // A label can contain a backslash (the second symbols page types one), and the
+                // fixture is read back as JSON, so both characters that mean something to a parser
+                // are neutralised here rather than trusted not to appear.
+                val label = placed.key.label.replace("\\", "\\\\").replace("\"", "'")
+                out.append("{\"label\":\"$label\",")
                 out.append("\"type\":\"${placed.key.type}\",")
                 out.append("\"span\":${HexBoard.spanCells(placed.key.widthWeight)},")
                 out.append("\"row\":${placed.row},")
@@ -161,6 +179,70 @@ class HexBoardPlacementDumpTest {
                 placement.keys.any { it.row == 3 && it.key.outputText in setOf("@", "/") },
             )
         }
+    }
+
+    @Test
+    fun `the symbols page is a honeycomb in both orientations, split included`() {
+        // The page a person meets when they go looking for a number. If its rows are not the letters
+        // board's cell counts the honeycomb is not merely ugly here, it is off the board, so the
+        // counts and the split are both checked rather than the page being assumed from the letters
+        // board's tests.
+        val upright = place(portraitSymbols, KeyboardSize.DEFAULT_STEP)
+        assertEquals(
+            "portrait symbols: ten columns",
+            10f * upright.cellWidth,
+            upright.boardWidth,
+            0.01f,
+        )
+        assertEquals("portrait symbols: four rows", 4, upright.keys.map { it.row }.distinct().size)
+        assertNull("portrait symbols: one board, no channel", upright.channel)
+        assertEquals(
+            "portrait symbols: one space key, over three cells",
+            1,
+            upright.keys.count { it.key.type == KeyType.SPACE },
+        )
+
+        val wide = place(landscapeSymbols, KeyboardSize.DEFAULT_STEP)
+        assertEquals(
+            "landscape symbols: one space hexagon per thumb",
+            2,
+            wide.keys.count { it.key.type == KeyType.SPACE },
+        )
+        assertNotNull("landscape symbols: the halves are held apart", wide.channel)
+        assertTrue(
+            "landscape symbols: every key is still one cell on the lattice",
+            wide.keys.all { it.width <= wide.cellWidth + 0.01f },
+        )
+    }
+
+    @Test
+    fun `landscape gives each thumb its own one-cell space hexagon, with a channel between`() {
+        // The report that produced this test was that landscape had no second space hexagon. The
+        // fixture says otherwise, and a claim about the board has to be settled by the board rather
+        // than by whichever of the two was read last, so the shape is pinned here: two spaces, one
+        // per half, each a single cell, and the halves held apart.
+        val placement = place(landscape, KeyboardSize.DEFAULT_STEP)
+        val spaces = placement.keys.filter { it.key.type == KeyType.SPACE }
+        assertEquals("one space key per half", 2, spaces.size)
+        for (space in spaces) {
+            assertEquals(
+                "each space is one cell, not a fused bar",
+                placement.cellWidth,
+                space.width,
+                0.01f,
+            )
+        }
+        val left = spaces.minBy { it.centerX }
+        val right = spaces.maxBy { it.centerX }
+        assertTrue(
+            "the left thumb's space sits in the left half",
+            left.centerX < placement.boardWidth / 2f,
+        )
+        assertTrue(
+            "the right thumb's space sits in the right half",
+            right.centerX > placement.boardWidth / 2f,
+        )
+        assertNotNull("the two halves are held apart by a channel", placement.channel)
     }
 
     @Test

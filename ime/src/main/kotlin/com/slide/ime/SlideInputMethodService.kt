@@ -195,6 +195,16 @@ class SlideInputMethodService :
     private var layer = Layer.ALPHA
 
     /**
+     * The language tag Android last reported, so a *change* can be told from the report that arrives
+     * at startup.
+     *
+     * The framework announces the current subtype when the keyboard starts, and adopting that as if
+     * the user had switched would overwrite a stored choice with whatever the platform happened to
+     * have enabled.
+     */
+    private var lastReportedSubtypeTag: String? = null
+
+    /**
      * The letters board, which the editor mode swaps in.
      *
      * The honeycomb: the hex slice changed the letters layer to the approved four-row board. Every
@@ -546,6 +556,12 @@ class SlideInputMethodService :
 
                 refreshSuggestionEmptyMessage()
                 applyTheme(resolveColours())
+
+                // The stored tag is the keyboard's own answer to which language is active, and this
+                // is the single door it walks through: the settings card and the globe key both only
+                // write it. Empty means no choice has been made, and the language stays as the
+                // reported subtype resolved it rather than being decided twice.
+                if (updated.languageTag.isNotEmpty()) activateLanguage(updated.languageTag)
             }
             .launchIn(scope)
 
@@ -561,6 +577,7 @@ class SlideInputMethodService :
         // opening the keyboard with the Spanish subtype already selected loads Spanish from the
         // first frame rather than after a callback that may or may not arrive first.
         language = KeyboardLanguages.resolve(reportedSubtypeLanguage())
+        lastReportedSubtypeTag = reportedSubtypeLanguage()
         loadLanguageResources(language)
 
         // Loaded separately from the lexicon so a slow font scan cannot hold up gesture typing,
@@ -629,44 +646,65 @@ class SlideInputMethodService :
     }
 
     /**
-     * The globe key: asks Android to move to the next enabled subtype of this keyboard.
+     * The globe key: moves to the next language this build ships, and stores it.
      *
-     * Deliberately not a language toggle of our own. A subtype is this input method's own
-     * declaration of what it can type and Android owns the list of enabled ones, so stepping to the
-     * next entry of that list is the same act the system's language switch performs — and it leaves
-     * [activateLanguage] the only thing that decides which language is active, instead of giving
-     * this key a second opinion about it.
-     *
-     * Every failure is a no-op: one enabled subtype, an unreadable list, or a switch the platform
-     * declines all leave the keyboard exactly as it was, which is what this key did before there
-     * was a second language to switch to.
+     * It used to step Android's *enabled* subtypes instead, which is why it did nothing at all on an
+     * install with one: a subtype is declared in `method.xml`, but Android only enables the entries
+     * its own keyboard-language list is ticked for, and the way to tick them is a screen three
+     * levels deep that a person has no reason to find. The switch is ours now — the tag it writes is
+     * the same field the settings card writes, and the settings flow is what activates it, so there
+     * is still exactly one thing that decides which language is live.
      */
     private fun switchToNextLanguage() {
+        val next = KeyboardLanguages.next(language)
+        scope.launch { settingsRepository.update { it.copy(languageTag = next.tag) } }
+        alignSubtypeWith(next.tag)
+    }
+
+    /**
+     * Nudges Android onto the subtype for [tag], when a matching one is enabled.
+     *
+     * Best effort on purpose, and silent when it cannot: the switch this key performs has already
+     * happened on this keyboard, and the platform's list disagreeing is a cosmetic mismatch in a
+     * screen the user has to go looking for. A platform switch that is refused therefore leaves the
+     * board exactly as it is.
+     */
+    private fun alignSubtypeWith(tag: String) {
         val manager = getSystemService(Context.INPUT_METHOD_SERVICE) as? InputMethodManager ?: return
         // This service is the input method being switched within, so its own component is the id
-        // `switchInputMethod` wants: a switch to a subtype of some other keyboard would be a
-        // switch to a different keyboard, not to this one's next language.
+        // `switchInputMethod` wants: a switch to a subtype of some other keyboard would be a switch
+        // to a different keyboard, not to this one's next language.
         val self = ComponentName(this, javaClass)
         try {
             val info = manager.inputMethodList.firstOrNull { it.packageName == packageName } ?: return
-            val subtypes = manager.getEnabledInputMethodSubtypeList(info, true).orEmpty()
-            if (subtypes.size < 2) return
-            val current = manager.currentInputMethodSubtype
-            // Not finding the current subtype means the list moved under us; starting at the first
-            // entry is still a switch forward, and switching is all this key promises.
-            val index = subtypes.indexOfFirst { it == current }
-            val next = subtypes[(index + 1) % subtypes.size]
-            switchInputMethod(self.flattenToShortString(), next)
+            val wantedLanguage = KeyboardLanguages.resolve(tag)
+            val wanted = manager.getEnabledInputMethodSubtypeList(info, true)
+                .orEmpty()
+                .firstOrNull { KeyboardLanguages.resolve(it.languageTag) == wantedLanguage }
+                ?: return
+            if (manager.currentInputMethodSubtype == wanted) return
+            switchInputMethod(self.flattenToShortString(), wanted)
         } catch (e: Exception) {
-            Log.w(TAG, "Could not switch to the next keyboard language", e)
+            Log.w(TAG, "Could not align the system subtype with the chosen language", e)
         }
     }
 
+    /**
+     * Android's own keyboard-language list is the second door onto the same switch, and a *change*
+     * arriving here is the user using it.
+     *
+     * Only a change is adopted. The framework also announces the current subtype when the keyboard
+     * starts, and treating that first announcement as a switch would overwrite a stored choice with
+     * whatever the platform happened to have enabled. The change is stored rather than activated
+     * directly, so both doors still end at the one thing that decides a language.
+     */
     override fun onCurrentInputMethodSubtypeChanged(newSubtype: InputMethodSubtype?) {
         super.onCurrentInputMethodSubtypeChanged(newSubtype)
-        // The system's keyboard-language list is the whole of the selection UI: whichever subtype it
-        // switches to is the language, and nothing else on this keyboard gets a vote.
-        activateLanguage(newSubtype?.languageTag)
+        val tag = newSubtype?.languageTag
+        val changed = tag != null && tag != lastReportedSubtypeTag
+        lastReportedSubtypeTag = tag
+        if (!changed) return
+        scope.launch { settingsRepository.update { it.copy(languageTag = tag) } }
     }
 
     /**
@@ -3569,10 +3607,25 @@ class SlideInputMethodService :
         updateGestureAvailability()
     }
 
+    /**
+     * The board for a layer.
+     *
+     * The symbols pages are the honeycomb's own when the honeycomb is the board on screen: `?123`
+     * used to answer with the stock rectangles, so the hex keys disappeared exactly when the user
+     * went looking for a number or a symbol. That is the same board-swap the browser and email
+     * fields had, and it is why this asks which shape is up rather than returning one fixed page.
+     *
+     * The two hex pages are shared by every language, like their stock counterparts, because
+     * nothing in them is a letter.
+     */
     private fun layoutFor(layer: Layer): KeyboardLayout = when (layer) {
         Layer.ALPHA -> editorBaseLayout
-        Layer.SYMBOLS -> Layouts.SymbolsEn
-        Layer.SYMBOLS_ALT -> Layouts.SymbolsAltEn
+        // The pages are chosen by the shape of the board on screen: `?123` used to answer every
+        // board with the stock rectangles, so the honeycomb disappeared exactly when the user went
+        // looking for a number or a symbol, the same board-swap the browser and email fields had.
+        // The choice lives in `Layouts.pagesFor` so it is one line here and is pinned by a test.
+        Layer.SYMBOLS -> Layouts.pagesFor(editorBaseLayout.hexKeys).symbols
+        Layer.SYMBOLS_ALT -> Layouts.pagesFor(editorBaseLayout.hexKeys).symbolsAlt
     }
 
     /**

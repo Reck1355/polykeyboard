@@ -9,9 +9,19 @@ package com.slide.core.layout
  * answer to the same question, and the failure that produces is quiet: the board in Spanish and
  * the dictionary in English, with every individual piece behaving as designed.
  *
- * The input is whatever Android reports as the current subtype's language tag. A subtype is
- * declarative and platform-owned (`ime/src/main/res/xml/method.xml`), so this is also the whole of
- * the selection mechanism: the system's own keyboard-language list is what changes it.
+ * There are two doors onto that one decision, and they are deliberately not two decisions:
+ *
+ * - The user's own choice, stored in `KeyboardSettings.languageTag`. This is what the settings
+ *   app's Languages card and the keyboard's globe key both write, and it is the door that made the
+ *   keyboard look like it had no language control at all when that card did not exist.
+ * - Android's current subtype, which is a platform-owned copy of the same fact
+ *   (`ime/src/main/res/xml/method.xml`). A *declared* subtype is not an *enabled* one: Android
+ *   enables the entries its own keyboard-language list is ticked for, so with one enabled subtype
+ *   the globe key was correctly switching to nothing, and the only way to change language was a
+ *   screen the user had no reason to find.
+ *
+ * [SWITCHABLE] is the list both doors speak in terms of, and it is also the whole of the in-app
+ * control: one row per entry, in this order, cycling from the last back to the first.
  */
 object KeyboardLanguages {
 
@@ -30,6 +40,51 @@ object KeyboardLanguages {
      * back rather than reaching a board with nothing behind it.
      */
     val SUPPORTED: Set<String> = setOf(FALLBACK, SPANISH)
+
+    /**
+     * One selectable language: the shipped language it resolves to, the subtype tag it is declared
+     * under, and the name a person reads.
+     *
+     * [label] is the language's own name for itself rather than its English name, because this list
+     * is read by someone looking for the language they type in. [tag] is what Android expects in a
+     * subtype and what the settings store holds, so a stored value is always a tag rather than a
+     * bare language and can be handed to either door unchanged.
+     */
+    data class Entry(val language: String, val tag: String, val label: String)
+
+    /**
+     * Every language this build can switch to, in the order the globe key and the settings card
+     * both walk. English is first because it is the fallback the board is drawn in before anything
+     * has been chosen.
+     */
+    val SWITCHABLE: List<Entry> = listOf(
+        Entry(FALLBACK, "en-US", "English"),
+        Entry(SPANISH, "es-ES", "Español"),
+    )
+
+    /** The entry for a resolved [language], or the fallback's when nothing matches. */
+    fun entryFor(language: String): Entry =
+        SWITCHABLE.firstOrNull { it.language == language } ?: SWITCHABLE.first()
+
+    /**
+     * The entry for a stored or reported tag, matching on the tag's language only.
+     *
+     * `en-GB` and `en_US` are both English, so a device reporting a regional variant of a language
+     * this build ships gets that language rather than the fallback.
+     */
+    fun entryForTag(tag: String?): Entry = entryFor(resolve(tag))
+
+    /**
+     * The next language after a resolved [language], wrapping at the end.
+     *
+     * The argument is a resolved language rather than a tag on purpose: the keyboard holds a
+     * resolved language while it is typing, and cycling from a tag would let a regional variant in
+     * the store change the order of the list.
+     */
+    fun next(language: String): Entry {
+        val index = SWITCHABLE.indexOfFirst { it.language == language }
+        return if (index < 0) SWITCHABLE.first() else SWITCHABLE[(index + 1) % SWITCHABLE.size]
+    }
 
     /**
      * Resolves a reported subtype language tag to a shipped language.

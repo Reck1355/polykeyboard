@@ -411,6 +411,7 @@ class KeyboardSettingsTest {
             colourSeedSaturation = 0.7f,
             colourSeedLightness = 0.4f,
             followSystemDarkMode = false,
+            languageTag = "es-ES",
             showKeyBorders = true,
             showKeyPreview = false,
             showNumberRow = false,

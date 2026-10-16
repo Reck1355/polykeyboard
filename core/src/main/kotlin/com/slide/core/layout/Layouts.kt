@@ -387,6 +387,12 @@ object Layouts {
     /** Layout id of [HexUriEs]. */
     const val ID_HEX_URI_ES = "hex_uri_es"
 
+    /** First symbols page on the honeycomb (`?123`). */
+    const val ID_HEX_SYMBOLS = "hex_symbols_en"
+
+    /** Second symbols page on the honeycomb (`=\<`). */
+    const val ID_HEX_SYMBOLS_ALT = "hex_symbols_alt_en"
+
     private fun digit(value: String, alternates: List<String> = emptyList()) =
         Key(value, KeyType.CHARACTER, alternates = alternates, gestureEligible = false)
 
@@ -561,6 +567,125 @@ object Layouts {
             KeyRow(listOf(toAlpha, sym("<", "‹«"), space, sym(">", "›»"), enter)),
         ),
     )
+
+    /**
+     * The first symbols page on the honeycomb, opened by `?123`.
+     *
+     * Same characters as [SymbolsEn] and the same four rows as the letters board: ten cells, then
+     * nine at the half-cell stagger, nine, and nine with three fused into the space bar. The counts
+     * are the letters board's on purpose — a tenth cell on a staggered row would push the row half a
+     * cell past the board it is drawn on.
+     *
+     * The stock page is what the `?123` key used to answer with, so the honeycomb disappeared
+     * exactly when the user went looking for a number: the same board-swap the browser and email
+     * fields had, in the place a person is most likely to meet it.
+     *
+     * Every key is one cell wide, as on the letters board, so the lattice holds. That is why the
+     * first page carries nine of the stock page's ten top-row symbols rather than all ten: the
+     * underscore moves to the second page, and the two rows of nine carry the rest in the same
+     * order the stock page has them.
+     */
+    val HexSymbolsEn = KeyboardLayout(
+        id = ID_HEX_SYMBOLS,
+        label = "Symbols",
+        languageTag = "en",
+        supportsNumberRow = false,
+        hexKeys = true,
+        rows = listOf(
+            KeyRow("1234567890".map { sym(it.toString()) }),
+            KeyRow(
+                listOf(
+                    sym("@"), sym("#"), sym("$", "€£¥¢"), sym("&"),
+                    sym("-", "–—~"), sym("+", "±"), sym("(", "[{<"), sym(")", "]}>"), sym("/"),
+                ),
+                HEX_ROW_OFFSET,
+                HEX_ROW_OFFSET,
+            ),
+            KeyRow(
+                listOf(toSymbolsAlt.copy(widthWeight = 1f)) +
+                    listOf(sym("*"), sym("\""), sym("'"), sym(":"), sym(";"), sym("!"), sym("?")) +
+                    listOf(delete.copy(widthWeight = 1f)),
+            ),
+            KeyRow(
+                listOf(
+                    globe,
+                    toAlpha.copy(widthWeight = 1f),
+                    comma,
+                    space.copy(widthWeight = 3f),
+                    period,
+                    emoji,
+                    enter.copy(widthWeight = 1f),
+                ),
+                HEX_ROW_OFFSET,
+                HEX_ROW_OFFSET,
+            ),
+        ),
+    )
+
+    /**
+     * The second symbols page on the honeycomb, reached from `=\<` on [HexSymbolsEn].
+     *
+     * The characters people go looking for and cannot find on the first page: the slash, the equals
+     * sign, the brackets and the currency symbols. The same rows as [SymbolsAltEn], on the
+     * honeycomb's own cell counts, with the underscore the first page gave up kept here.
+     */
+    val HexSymbolsAltEn = KeyboardLayout(
+        id = ID_HEX_SYMBOLS_ALT,
+        label = "Symbols",
+        languageTag = "en",
+        supportsNumberRow = false,
+        hexKeys = true,
+        rows = listOf(
+            KeyRow(
+                listOf(
+                    sym("~"), sym("`"), sym("|"), sym("•"), sym("√"),
+                    sym("π"), sym("÷"), sym("×"), sym("§", "¶"), sym("\\"),
+                ),
+            ),
+            KeyRow(
+                listOf(
+                    sym("£"), sym("¢"), sym("€"), sym("¥"), sym("^"),
+                    sym("°"), sym("="), sym("{"), sym("}"),
+                ),
+                HEX_ROW_OFFSET,
+                HEX_ROW_OFFSET,
+            ),
+            KeyRow(
+                listOf(toSymbols.copy(widthWeight = 1f)) +
+                    listOf(sym("%", "‰"), sym("©"), sym("_"), sym("™"), sym("✓"), sym("["), sym("]")) +
+                    listOf(delete.copy(widthWeight = 1f)),
+            ),
+            KeyRow(
+                listOf(
+                    globe,
+                    toAlpha.copy(widthWeight = 1f),
+                    sym("<", "‹«"),
+                    space.copy(widthWeight = 3f),
+                    sym(">", "›»"),
+                    emoji,
+                    enter.copy(widthWeight = 1f),
+                ),
+                HEX_ROW_OFFSET,
+                HEX_ROW_OFFSET,
+            ),
+        ),
+    )
+
+    /** One symbols page per shape: the honeycomb's own when [hexKeys], the stock rectangles otherwise. */
+    data class SymbolPages(val symbols: KeyboardLayout, val symbolsAlt: KeyboardLayout)
+
+    /**
+     * The two symbols pages for the shape in use.
+     *
+     * A board's shape is not a property of the symbols it types, so the pages are chosen by the
+     * *shape* of the board on screen rather than fixed. Before this existed, `?123` and `=&#92;<`
+     * answered every board with the stock rectangles, so the honeycomb vanished exactly when the
+     * user went looking for a number, and the two shapes are otherwise the same characters in the
+     * same order.
+     */
+    fun pagesFor(hexKeys: Boolean): SymbolPages =
+        if (hexKeys) SymbolPages(HexSymbolsEn, HexSymbolsAltEn)
+        else SymbolPages(SymbolsEn, SymbolsAltEn)
 
     private fun sym(s: String, alternates: String = "") =
         Key(s, KeyType.CHARACTER, alternates = alternates.map(Char::toString), gestureEligible = false)

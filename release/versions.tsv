@@ -1,20 +1,9 @@
 # version	versionCode
-0.1.0-alpha.1	1
-0.1.0-alpha.2	2
-0.1.0-alpha.3	3
-0.1.0-alpha.4	4
-0.1.0-alpha.5	5
-0.1.0-alpha.6	6
-0.2.0	7
-0.2.1	8
-0.3.0	9
-0.3.1	10
-0.3.2	11
-0.3.3	12
-0.3.4	13
-0.4.0	14
-0.5.0	15
-0.5.1	16
-0.5.2	17
-0.5.3	18
-0.5.4	19
+# This fork restarted versioning at 0.1 (versionCode 20), so Slide's own history is deliberately not
+# carried over: the checker requires every row to be newer than the one above it, and 0.1 is not
+# newer than 0.5.4. The fork's first release is absent for a second reason of its own: its
+# versionName was "0.1", which is not valid SemVer and would fail the checker's own parse before it
+# ever reached the comparison. What follows is the fork's history, from the first release whose name
+# can be checked.
+0.1.1	21
+0.1.2	22
