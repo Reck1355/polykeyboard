@@ -117,21 +117,55 @@ class PinyinDecoder(
      * Words whose pinyin starts with [input], best first — what a candidate strip shows while the
      * user is still typing. Deduped, because one word can be reachable by more than one key.
      */
+    /**
+     * Whole-word matches for exactly [input], by frequency.
+     *
+     * The first answer a Chinese keyboard owes: `jia` is 家 before 加 before 假, and every one of
+     * those is a word whose pinyin is the thing that was typed rather than a guess about what comes
+     * next. Read from the same ranges [prefixCandidates] walks, so there is no second source of truth
+     * about what a key holds.
+     */
+    fun exactCandidates(input: String, limit: Int = 8): List<String> {
+        val key = sanitize(input)
+        if (key.isEmpty()) return emptyList()
+        val words = data.keyRanges[key] ?: return emptyList()
+        val scored = words.map { model.score(it, -1) to it }
+            .sortedWith(compareByDescending<Pair<Double, Int>> { it.first }.thenBy { it.second })
+        val seen = HashSet<String>()
+        val out = ArrayList<String>(limit)
+        for ((_, word) in scored) {
+            if (seen.add(data.words[word])) out += data.words[word]
+            if (out.size >= limit) break
+        }
+        return out
+    }
+
     fun prefixCandidates(input: String, limit: Int = 8): List<String> {
         val key = sanitize(input)
         if (key.isEmpty()) return emptyList()
-        val scored = ArrayList<Pair<Double, Int>>()
+        // A word whose key IS the input outranks a word whose key merely starts with it, and only
+        // then by frequency. Frequency alone is the wrong question here: for `jia` it answers with 将
+        // (jiang), 叫 (jiao) and 见 (jian), three common words that happen to be longer, and pushes 家
+        // itself to fourth, which is not what a Chinese keyboard offers and not what a person
+        // typing `jia` is asking for. The set is unchanged, so this stays a prefix search; only the
+        // order now answers the question the user asked.
+        val scored = ArrayList<Triple<Boolean, Double, Int>>()
         for ((candidateKey, range) in data.keyRanges) {
             if (!candidateKey.startsWith(key)) continue
-            for (word in range) scored += model.score(word, -1) to word
+            val exact = candidateKey == key
+            for (word in range) scored += Triple(exact, model.score(word, -1), word)
         }
-        scored.sortWith(compareByDescending<Pair<Double, Int>> { it.first }.thenBy { it.second })
+        scored.sortWith(
+            compareByDescending<Triple<Boolean, Double, Int>> { it.first }
+                .thenByDescending { it.second }
+                .thenBy { it.third },
+        )
         // Deduplicated by the word itself, not by its index: a word can be reachable through more
         // than one pinyin key (那 is both `na` and `nei`), and a strip that shows 那 twice looks
         // broken even though each entry is correct on its own.
         val seen = HashSet<String>()
         val out = ArrayList<String>(limit)
-        for ((_, word) in scored) {
+        for ((_, _, word) in scored) {
             if (seen.add(data.words[word])) out += data.words[word]
             if (out.size >= limit) break
         }

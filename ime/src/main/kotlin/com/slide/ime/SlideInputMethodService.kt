@@ -3201,7 +3201,13 @@ class SlideInputMethodService :
         if (!pinyinTyping.isActive) return emptyList()
         // Eight is the engine's own default, and a strip's worth: past that the words are off the
         // edge of the screen and the reader is scrolling a suggestion bar instead of typing.
-        return engine.candidates(pinyinTyping.composing.toString())
+        //
+        // This is the whole-string entry point and not the prefix search alone. The prefix search
+        // answers "what starts with these letters", which for `jia` put 将, 叫 and 见 first because
+        // they are more common words that merely begin with those letters, and pushed 家 to fourth;
+        // and for a phrase like `woaini` it answers nothing at all, because no single word's pinyin
+        // is that string. The engine reads the whole thing as well, which is where 我爱你 lives.
+        return engine.keyboardCandidates(pinyinTyping.composing.toString())
             .map { StripSuggestion(it, isCorrection = false) }
     }
 

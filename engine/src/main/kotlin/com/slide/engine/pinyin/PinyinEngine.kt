@@ -30,6 +30,39 @@ class PinyinEngine(private val data: PinyinData) {
     /** Words beginning with [input], best first, for a candidate strip. */
     fun candidates(input: String, limit: Int = 8): List<String> = decoder.prefixCandidates(input, limit)
 
+    /**
+     * What a keyboard should offer for [input], best first.
+     *
+     * Three answers, in the order a person expects them, because the three are not the same question:
+     *
+     * 1. Words whose pinyin IS what has been typed. `jia` is 家 before 加 before 假, and none of those
+     *    is a guess about what comes next.
+     * 2. The best readings of everything typed, segmented across syllables. This is the sentence path,
+     *    and it is where `woaini` becomes 我爱你: a string that is not any single word's key still has a
+     *    reading, and without this the strip offers nothing at all for it.
+     * 3. Words that merely start with what has been typed, so a half-typed word still shows what it
+     *    could become.
+     *
+     * [prefixCandidates] alone is only the third of these, and calling it alone is why a phrase used to
+     * come back empty and a bare syllable used to answer with the wrong words.
+     */
+    fun keyboardCandidates(input: String, limit: Int = 8): List<String> {
+        val seen = LinkedHashSet<String>()
+        for (word in decoder.exactCandidates(input, limit)) {
+            seen += word
+            if (seen.size >= limit) return seen.toList()
+        }
+        for (word in decoder.decode(input, limit)) {
+            seen += word
+            if (seen.size >= limit) return seen.toList()
+        }
+        for (word in decoder.prefixCandidates(input, limit)) {
+            seen += word
+            if (seen.size >= limit) break
+        }
+        return seen.toList()
+    }
+
     /** The best single reading, or null when the input is not pinyin this engine knows. */
     fun best(input: String): String? = readings(input, limit = 1).firstOrNull()
 
