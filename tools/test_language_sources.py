@@ -17,6 +17,7 @@ from unittest import mock
 
 import build_emoji
 import fetch_language_sources
+import rebuild_language_assets
 from rebuild_language_assets import replace_file
 from fetch_language_sources import (
     SourceSpec,
@@ -129,6 +130,74 @@ class LanguageSourceLockTest(unittest.TestCase):
         self.assertEqual(
             source.sha256, hashlib.sha256(bundled.read_bytes()).hexdigest()
         )
+
+    def test_spanish_tatoeba_url_is_snapshot_locked_the_same_way(self) -> None:
+        source = load_lock().sources["tatoeba_spanish_sentences"]
+        self.assertTrue(source.mutable_origin)
+        self.assertIn("2026-10-10", source.filename)
+        self.assertIn("2026-10-10", source.revision)
+        self.assertRegex(source.sha256, r"^[0-9a-f]{64}$")
+        self.assertIsNotNone(source.bundled_path)
+        bundled = ROOT / str(source.bundled_path)
+        self.assertTrue(bundled.is_file())
+        self.assertEqual(source.size, bundled.stat().st_size)
+        self.assertEqual(
+            source.sha256, hashlib.sha256(bundled.read_bytes()).hexdigest()
+        )
+
+    def test_spanish_wordlist_is_an_immutable_revisioned_source(self) -> None:
+        source = load_lock().sources["aosp_spanish_wordlist"]
+        self.assertFalse(source.mutable_origin)
+        self.assertEqual("lexicon", source.group)
+        self.assertNotIn("/latest/", source.retrieval_url)
+        self.assertNotIn("/main/", source.retrieval_url)
+        self.assertRegex(source.sha256, r"^[0-9a-f]{64}$")
+        self.assertIn("c692b122", source.revision)
+
+    def test_no_language_reuses_another_language_s_source(self) -> None:
+        """Four different files: a Spanish asset built from the English corpus is not Spanish."""
+        lock = load_lock()
+        keys = [
+            build.lexicon_key for build in rebuild_language_assets.LANGUAGES.values()
+        ] + [build.context_key for build in rebuild_language_assets.LANGUAGES.values()]
+        self.assertEqual(4, len(keys))
+        self.assertEqual(4, len({lock.sources[key].sha256 for key in keys}))
+
+    def test_every_language_in_the_plan_is_locked_and_fully_output(self) -> None:
+        plan = rebuild_language_assets.expected_outputs()
+        lock = load_lock()
+        # The driver refuses to run when these disagree; the test states it as the invariant it is,
+        # because an unlocked output is an asset that would never be rebuilt or verified.
+        self.assertEqual(set(plan), set(lock.generated_outputs))
+        for language, build in rebuild_language_assets.LANGUAGES.items():
+            expected = build.outputs(language)
+            self.assertEqual(4, len(expected))
+            for target, role in expected.items():
+                self.assertEqual((language, role), plan[target])
+                self.assertIn(target, lock.generated_outputs)
+            self.assertEqual("latin" if language == "es" else "ascii", build.alphabet)
+            self.assertIn(build.lexicon_key, lock.sources)
+            self.assertIn(build.context_key, lock.sources)
+            self.assertEqual("lexicon", lock.sources[build.lexicon_key].group)
+            self.assertEqual("context", lock.sources[build.context_key].group)
+
+    def test_the_source_role_map_addresses_every_locked_language_source(self) -> None:
+        lock = load_lock()
+        roles = rebuild_language_assets.source_keys()
+        for language, build in rebuild_language_assets.LANGUAGES.items():
+            self.assertEqual(build.lexicon_key, roles[f"{language}:lexicon"])
+            self.assertEqual(build.context_key, roles[f"{language}:context"])
+        for role, key in roles.items():
+            self.assertIn(key, lock.sources, role)
+
+    def test_every_language_alphabet_is_one_both_builders_accept(self) -> None:
+        """A language whose alphabet the builders do not know could not be rebuilt at all."""
+        import build_bigrams
+        import build_lexicon
+
+        for language, build in rebuild_language_assets.LANGUAGES.items():
+            self.assertIn(build.alphabet, build_lexicon.ALPHABETS, language)
+            self.assertIn(build.alphabet, build_bigrams.TOKEN_RE, language)
 
     def test_local_source_mismatch_is_rejected_without_output(self) -> None:
         expected = b"locked bytes"

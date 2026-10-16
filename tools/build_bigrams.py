@@ -32,14 +32,22 @@ Bigrams are keyed by lexicon index, so this must be rebuilt whenever the lexicon
     [scores]        pair count x u8         quantised log P(next | previous)
 
 Usage:
-    python3 tools/build_bigrams.py /tmp/tatoeba_eng.tsv \\
+    python3 tools/build_bigrams.py [--alphabet ascii|latin] /tmp/tatoeba_eng.tsv \\
         engine/src/main/assets/lexicon_en.bin \\
         engine/src/main/assets/bigrams_en.bin \\
         engine/src/test/resources/heldout_en.txt [engine/src/main/assets/trigrams_en.bin]
+
+`--alphabet` must match the one its lexicon was built with (see build_lexicon.py). It decides
+which letters a token may contain and, because the pair indices are addressed by the lexicon's
+fingerprint, how the fingerprint is encoded: `ascii` for English, `latin` for Spanish, whose
+accented letters are one byte each in Latin-1. Every model built from the same words but a
+different alphabet would be rejected by the loader as a mismatch, so the two scripts are always
+run with the same value.
 """
 
 from __future__ import annotations
 
+import argparse
 import hashlib
 import math
 import re
@@ -56,7 +64,22 @@ TRIGRAM_VERSION = 1
 LEXICON_MAGIC = b"SLEX"
 
 # Matches the lexicon's own notion of a word: letters and the apostrophe, nothing else.
-TOKEN_RE = re.compile(r"[a-z']+")
+ASCII_ALPHABET = "ascii"
+LATIN_ALPHABET = "latin"
+TOKEN_RE = {
+    ASCII_ALPHABET: re.compile(r"[a-z']+"),
+    # Lowercased Spanish: á é í ó ú ü ñ are letters, and \W excludes the punctuation that
+    # would otherwise split a word in two -- `[a-z']+` turns "está" into "est" and "a".
+    LATIN_ALPHABET: re.compile(r"[^\W\d_']+"),
+}
+
+# The byte identity of the lexicon is a per-alphabet codec: the loader hashes the low byte of
+# each character, which is ASCII for English and Latin-1 for Spanish. Both are fixed-width, so
+# neither can collide two different words onto the same digest.
+ALPHABET_CODEC = {
+    ASCII_ALPHABET: "ascii",
+    LATIN_ALPHABET: "latin-1",
+}
 
 # A pair seen once is as likely to be noise as signal, and singletons are over half the distinct
 # pairs in any corpus this size. Dropping them costs almost no coverage and halves the asset.
@@ -91,6 +114,11 @@ HELDOUT_DIGIT = 7
 # ordinary English and worth counting. The cost is that the genuine words "tom" (a male cat),
 # "mary" and "boston" stop being predicted, which is a small price for not threading a textbook's
 # stage names through someone's messages.
+#
+# Applied unchanged to the Spanish corpus, which is the same Tatoeba translation pool and carries
+# the same skew ("Tom" is the staple of its Spanish half too). The set is deliberately not
+# extended per language: guessing at a second corpus's placeholder cast is how a real word ends up
+# suppressed in someone's messages.
 PLACEHOLDER_NAMES = frozenset({"tom", "mary", "boston"})
 
 
@@ -114,20 +142,26 @@ def read_lexicon(path: Path) -> list[str]:
         shared = block[read]
         suffix_length = block[read + 1]
         read += 2
-        word = previous[:shared] + block[read : read + suffix_length].decode("ascii")
+        # ASCII is a subset of UTF-8, so this decodes the English assets byte for byte as before.
+        word = previous[:shared] + block[read : read + suffix_length].decode("utf-8")
         read += suffix_length
         words.append(word)
         previous = word
     return words
 
 
-def lexicon_fingerprint(words: list[str]) -> bytes:
+def lexicon_fingerprint(words: list[str], alphabet: str = ASCII_ALPHABET) -> bytes:
     """Stable identity of the exact ordered word list that the pair indices address."""
+    codec = ALPHABET_CODEC[alphabet]
     digest = hashlib.sha256()
     for word in words:
         if word != word.lower():
             raise SystemExit(f"lexicon word is not lowercase: {word!r}")
-        digest.update(word.encode("ascii"))
+        try:
+            encoded = word.encode(codec)
+        except UnicodeEncodeError:
+            raise SystemExit(f"lexicon word {word!r} is outside the {alphabet} alphabet") from None
+        digest.update(encoded)
         digest.update(b"\0")
     return digest.digest()
 
@@ -148,19 +182,22 @@ def sentences(path: Path) -> tuple[list[str], list[str]]:
     return train, heldout
 
 
-def count_pairs(corpus: list[str], index_of: dict[str, int]) -> dict[int, dict[int, int]]:
+def count_pairs(
+    corpus: list[str], index_of: dict[str, int], alphabet: str = ASCII_ALPHABET
+) -> dict[int, dict[int, int]]:
     """
     Counts adjacent word pairs, keyed by lexicon index.
 
     Pairs are only counted within a sentence: the last word of one and the first of the next never
     followed each other in anything anyone wrote.
     """
+    token_re = TOKEN_RE[alphabet]
     pairs: dict[int, dict[int, int]] = defaultdict(lambda: defaultdict(int))
     kept = 0
     dropped = 0
     for text in corpus:
         previous = -1
-        for token in TOKEN_RE.findall(text.lower()):
+        for token in token_re.findall(text.lower()):
             word = token.strip("'")
             if word in PLACEHOLDER_NAMES:
                 # Breaks the chain rather than skipping the token, so the words either side of a
@@ -179,14 +216,15 @@ def count_pairs(corpus: list[str], index_of: dict[str, int]) -> dict[int, dict[i
 
 
 def count_triples(
-    corpus: list[str], index_of: dict[str, int]
+    corpus: list[str], index_of: dict[str, int], alphabet: str = ASCII_ALPHABET
 ) -> dict[tuple[int, int], dict[int, int]]:
     """Counts third words conditioned on the two in-lexicon words immediately before them."""
+    token_re = TOKEN_RE[alphabet]
     triples: dict[tuple[int, int], dict[int, int]] = defaultdict(lambda: defaultdict(int))
     kept = 0
     for text in corpus:
         history: list[int] = []
-        for token in TOKEN_RE.findall(text.lower()):
+        for token in token_re.findall(text.lower()):
             word = token.strip("'")
             current = -1 if word in PLACEHOLDER_NAMES else index_of.get(word, -1)
             if current < 0:
@@ -317,19 +355,38 @@ def encode_trigrams(
     return bytes(out)
 
 
-def main() -> int:
-    if len(sys.argv) not in (5, 6):
-        print(__doc__)
-        return 2
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(
+        description="Build Slide's bigram and trigram models from a Tatoeba sentence export."
+    )
+    parser.add_argument("corpus", type=Path)
+    parser.add_argument("lexicon", type=Path)
+    parser.add_argument("target", type=Path)
+    parser.add_argument("heldout", type=Path)
+    parser.add_argument("trigram", type=Path, nargs="?")
+    parser.add_argument(
+        "--alphabet",
+        choices=sorted(TOKEN_RE),
+        default=ASCII_ALPHABET,
+        help="the alphabet the lexicon was built with (default: ascii, English)",
+    )
+    args = parser.parse_args(argv)
 
-    corpus_path, lexicon_path, target, heldout_path = (Path(p) for p in sys.argv[1:5])
-    trigram_path = Path(sys.argv[5]) if len(sys.argv) == 6 else None
+    corpus_path, lexicon_path, target, heldout_path = (
+        args.corpus,
+        args.lexicon,
+        args.target,
+        args.heldout,
+    )
+    trigram_path = args.trigram
+    alphabet = args.alphabet
 
     print(f"reading {lexicon_path}")
     words = read_lexicon(lexicon_path)
     index_of = {word: index for index, word in enumerate(words)}
     print(f"  lexicon       {len(words):,} words")
-    fingerprint = lexicon_fingerprint(words)
+    print(f"  alphabet      {alphabet}")
+    fingerprint = lexicon_fingerprint(words, alphabet)
     print(f"  fingerprint   {fingerprint.hex()}")
 
     print(f"reading {corpus_path}")
@@ -340,7 +397,7 @@ def main() -> int:
         print("no sentences parsed - is this the Tatoeba TSV export?", file=sys.stderr)
         return 1
 
-    pairs = count_pairs(train, index_of)
+    pairs = count_pairs(train, index_of, alphabet)
     blob = encode(pairs, len(words), fingerprint)
 
     target.parent.mkdir(parents=True, exist_ok=True)
@@ -349,7 +406,7 @@ def main() -> int:
 
     if trigram_path is not None:
         print("building trigrams")
-        triples = count_triples(train, index_of)
+        triples = count_triples(train, index_of, alphabet)
         trigram_blob = encode_trigrams(triples, len(words), fingerprint)
         trigram_path.parent.mkdir(parents=True, exist_ok=True)
         trigram_path.write_bytes(trigram_blob)

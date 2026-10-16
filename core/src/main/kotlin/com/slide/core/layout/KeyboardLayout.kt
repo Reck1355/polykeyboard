@@ -84,9 +84,11 @@ enum class KeyType {
     /**
      * The language switch — the globe.
      *
-     * Distinct from [SYMBOLS] and [SETTINGS] because it will one day pick a language, and a key
-     * that has to be told apart from every other special key by its label alone is a key the
-     * service cannot dispatch. Inert until a second language ships.
+     * Distinct from [SYMBOLS] and [SETTINGS] because it picks a language, and a key that has to be
+     * told apart from every other special key by its label alone is a key the service cannot
+     * dispatch. The keyboard ships English and Spanish, so the key now steps to the next subtype
+     * Android has enabled for it; which language that leaves active is decided in one place, by
+     * resolving the subtype the system reports.
      */
     LANGUAGE,
     MIC,

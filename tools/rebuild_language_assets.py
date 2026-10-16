@@ -14,19 +14,88 @@ import stat
 import subprocess
 import sys
 import tempfile
+from dataclasses import dataclass
 from pathlib import Path
 
 from fetch_language_sources import load_lock, materialize_source
 
 ROOT = Path(__file__).resolve().parent.parent
 
-SOURCE_KEYS = {
+# The emoji catalogue is language-independent: one asset serves every board.
+EMOJI_SOURCE_KEYS = {
     "emoji": "unicode_emoji_test",
     "annotations": "cldr_annotations_en",
     "derived": "cldr_annotations_derived_en",
-    "lexicon": "aosp_english_wordlist",
-    "context": "tatoeba_english_sentences",
 }
+
+EMOJI_OUTPUT = "core/src/main/assets/emoji.bin"
+
+
+@dataclass(frozen=True)
+class LanguageBuild:
+    """One language's locked sources and the shape of the assets built from them.
+
+    [alphabet] is passed to both builders and is what keeps two languages' assets from being
+    built to different rules by accident; see build_lexicon.py. The decompressed names are only
+    scratch filenames, but they are here rather than inline so the two languages cannot collide
+    in the shared temporary directory.
+    """
+
+    alphabet: str
+    lexicon_key: str
+    context_key: str
+    lexicon_filename: str
+    context_filename: str
+
+    def outputs(self, language: str) -> dict[str, str]:
+        """Every asset this language produces, mapped to the source role that feeds it."""
+        return {
+            f"engine/src/main/assets/lexicon_{language}.bin": "lexicon",
+            f"engine/src/main/assets/bigrams_{language}.bin": "context",
+            f"engine/src/main/assets/trigrams_{language}.bin": "context",
+            f"engine/src/test/resources/heldout_{language}.txt": "context",
+        }
+
+
+LANGUAGES = {
+    "en": LanguageBuild(
+        alphabet="ascii",
+        lexicon_key="aosp_english_wordlist",
+        context_key="tatoeba_english_sentences",
+        lexicon_filename="aosp-en-wordlist.combined",
+        context_filename="tatoeba-eng-sentences.tsv",
+    ),
+    "es": LanguageBuild(
+        alphabet="latin",
+        lexicon_key="aosp_spanish_wordlist",
+        context_key="tatoeba_spanish_sentences",
+        lexicon_filename="aosp-es-wordlist.combined",
+        context_filename="tatoeba-spa-sentences.tsv",
+    ),
+}
+
+
+def expected_outputs() -> dict[str, tuple[str, str]]:
+    """Every locked output, as (language, source role), for the plan above.
+
+    The language is "" for the shared emoji asset. Kept as one mapping so a language added to
+    [LANGUAGES] without a matching lock entry, or a lock entry no language produces, is a
+    startup error rather than an asset that is silently never rebuilt.
+    """
+    outputs = {EMOJI_OUTPUT: ("", "emoji")}
+    for language, build in LANGUAGES.items():
+        for target, role in build.outputs(language).items():
+            outputs[target] = (language, role)
+    return outputs
+
+
+def source_keys() -> dict[str, str]:
+    """Source role -> lock key, across every language."""
+    keys = dict(EMOJI_SOURCE_KEYS)
+    for language, build in LANGUAGES.items():
+        keys[f"{language}:lexicon"] = build.lexicon_key
+        keys[f"{language}:context"] = build.context_key
+    return keys
 
 
 def sha256(path: Path) -> str:
@@ -77,6 +146,12 @@ def main() -> int:
         help="replace committed assets after verification",
     )
     parser.add_argument(
+        "--language",
+        action="append",
+        choices=["all", *sorted(LANGUAGES)],
+        help="rebuild and verify only this language; repeat for more than one (default: every one)",
+    )
+    parser.add_argument(
         "--sources-dir",
         type=Path,
         help="use an archived set of locked source files instead of downloading retrieval hints",
@@ -85,13 +160,37 @@ def main() -> int:
 
     try:
         lock = load_lock()
+        plan = expected_outputs()
+        # A language whose assets are not locked would be built and then thrown away; a locked
+        # asset no language produces would never be rebuilt and never be verified. Both are
+        # programming errors in this file, not build inputs, so they stop the run.
+        if set(plan) != set(lock.generated_outputs):
+            unbuilt = sorted(set(plan) - set(lock.generated_outputs))
+            unlocked = sorted(set(lock.generated_outputs) - set(plan))
+            raise ValueError(
+                f"the source lock and the build plan disagree: unbuilt {unbuilt}, unlocked {unlocked}"
+            )
+
+        requested = args.language or ["all"]
+        selected = set(LANGUAGES) if "all" in requested else set(requested)
+        # The emoji catalogue is shared, so it is rebuilt and verified whichever language was
+        # asked for rather than being rebuilt by whichever one happens to be first.
+        targets = {
+            target
+            for target, (language, _) in plan.items()
+            if language == "" or language in selected
+        }
+
         with tempfile.TemporaryDirectory(
             prefix="slide-language-build-"
         ) as temporary_name:
             work = Path(temporary_name)
             source_dir = work / "sources"
             sources: dict[str, Path] = {}
-            for role, key in SOURCE_KEYS.items():
+            for role, key in source_keys().items():
+                language = role.split(":", 1)[0]
+                if language in LANGUAGES and language not in selected:
+                    continue
                 spec = lock.sources[key]
                 local = (
                     args.sources_dir / spec.filename
@@ -100,13 +199,8 @@ def main() -> int:
                 )
                 sources[role] = materialize_source(spec, source_dir, local)
 
-            lexicon_text = work / "aosp-en-wordlist.combined"
-            context_text = work / "tatoeba-eng-sentences.tsv"
-            decompress(sources["lexicon"], lexicon_text, "gzip")
-            decompress(sources["context"], context_text, "bzip2")
-
             built = work / "built"
-            outputs = {target: built / target for target in lock.generated_outputs}
+            outputs = {target: built / target for target in targets}
             run(
                 [
                     sys.executable,
@@ -118,30 +212,52 @@ def main() -> int:
                     "--derived",
                     str(sources["derived"]),
                     "--output",
-                    str(outputs["core/src/main/assets/emoji.bin"]),
-                ]
-            )
-            run(
-                [
-                    sys.executable,
-                    str(ROOT / "tools/build_lexicon.py"),
-                    str(lexicon_text),
-                    str(outputs["engine/src/main/assets/lexicon_en.bin"]),
-                ]
-            )
-            run(
-                [
-                    sys.executable,
-                    str(ROOT / "tools/build_bigrams.py"),
-                    str(context_text),
-                    str(outputs["engine/src/main/assets/lexicon_en.bin"]),
-                    str(outputs["engine/src/main/assets/bigrams_en.bin"]),
-                    str(outputs["engine/src/test/resources/heldout_en.txt"]),
-                    str(outputs["engine/src/main/assets/trigrams_en.bin"]),
+                    str(outputs[EMOJI_OUTPUT]),
                 ]
             )
 
-            for target_name, expected_hash in lock.generated_outputs.items():
+            for language, build in LANGUAGES.items():
+                if language not in selected:
+                    continue
+                # Each language decompresses its own copies: the builders take paths, and two
+                # languages sharing one scratch file would be a race the day this is parallel.
+                lexicon_text = work / build.lexicon_filename
+                context_text = work / build.context_filename
+                decompress(sources[f"{language}:lexicon"], lexicon_text, "gzip")
+                decompress(sources[f"{language}:context"], context_text, "bzip2")
+
+                language_outputs = build.outputs(language)
+                if not set(language_outputs) <= targets:
+                    raise ValueError(f"language {language} does not build every locked output")
+                run(
+                    [
+                        sys.executable,
+                        str(ROOT / "tools/build_lexicon.py"),
+                        "--alphabet",
+                        build.alphabet,
+                        str(lexicon_text),
+                        str(outputs[f"engine/src/main/assets/lexicon_{language}.bin"]),
+                    ]
+                )
+                run(
+                    [
+                        sys.executable,
+                        str(ROOT / "tools/build_bigrams.py"),
+                        "--alphabet",
+                        build.alphabet,
+                        str(context_text),
+                        str(outputs[f"engine/src/main/assets/lexicon_{language}.bin"]),
+                        str(outputs[f"engine/src/main/assets/bigrams_{language}.bin"]),
+                        str(outputs[f"engine/src/test/resources/heldout_{language}.txt"]),
+                        str(outputs[f"engine/src/main/assets/trigrams_{language}.bin"]),
+                    ]
+                )
+                built_targets = set(language_outputs)
+                if not built_targets <= targets:
+                    raise ValueError(f"language {language} did not build every locked output")
+
+            for target_name in sorted(targets):
+                expected_hash = lock.generated_outputs[target_name]
                 actual_hash = sha256(outputs[target_name])
                 if actual_hash != expected_hash:
                     raise ValueError(
@@ -149,15 +265,16 @@ def main() -> int:
                     )
 
             if args.write:
-                for target_name in lock.generated_outputs:
+                for target_name in sorted(targets):
                     replace_file(outputs[target_name], ROOT / target_name)
-                print("Rebuilt and replaced all locked language assets.")
+                print(
+                    f"Rebuilt and replaced the locked language assets for {', '.join(sorted(selected))}."
+                )
             else:
-                for target_name, expected_hash in lock.generated_outputs.items():
+                for target_name in sorted(targets):
                     committed = ROOT / target_name
-                    actual_hash = sha256(committed)
                     if (
-                        actual_hash != expected_hash
+                        sha256(committed) != lock.generated_outputs[target_name]
                         or committed.read_bytes() != outputs[target_name].read_bytes()
                     ):
                         raise ValueError(

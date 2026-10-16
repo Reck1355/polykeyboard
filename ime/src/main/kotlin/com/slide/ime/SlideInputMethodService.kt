@@ -1,5 +1,6 @@
 package com.slide.ime
 
+import android.content.ComponentName
 import android.content.Context
 import android.content.pm.PackageManager
 import android.content.res.Configuration
@@ -20,6 +21,7 @@ import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.ExtractedTextRequest
 import android.view.inputmethod.InputConnection
 import android.view.inputmethod.InputMethodManager
+import android.view.inputmethod.InputMethodSubtype
 import android.window.OnBackInvokedCallback
 import android.window.OnBackInvokedDispatcher
 import android.widget.LinearLayout
@@ -34,6 +36,7 @@ import com.slide.core.emoji.EmojiLoader
 import com.slide.core.layout.Key
 import com.slide.core.layout.KeyType
 import com.slide.core.layout.KeyboardLayout
+import com.slide.core.layout.KeyboardLanguages
 import com.slide.core.layout.Layouts
 import com.slide.core.settings.KeyboardSettings
 import com.slide.core.settings.SettingsRepository
@@ -45,6 +48,7 @@ import com.slide.engine.gesture.GestureDecoderProvenance
 import com.slide.engine.gesture.GestureDecoderSource
 import com.slide.engine.gesture.GestureDecodingEngine
 import com.slide.engine.gesture.GestureKeyMap
+import com.slide.engine.gesture.GestureModels
 import com.slide.engine.gesture.GesturePoint
 import com.slide.engine.gesture.NeuralGestureDecoder
 import com.slide.engine.gesture.SwipeLexiconTrie
@@ -67,6 +71,7 @@ import com.slide.ime.text.EditorInputPolicy
 import com.slide.ime.text.EditorKeyboardMode
 import com.slide.ime.text.EditorSelection
 import com.slide.ime.text.ExpectedSelectionTracker
+import com.slide.ime.text.GestureAvailability
 import com.slide.ime.text.GestureDeleteTransaction
 import com.slide.ime.text.GestureEditorSnapshot
 import com.slide.ime.text.GestureEditTransaction
@@ -235,6 +240,18 @@ class SlideInputMethodService :
 
     /** Shares the lexicon with the decoder; null until it loads, for the same reason. */
     private var typingSuggester: TypingSuggester? = null
+
+    /**
+     * The active language, and the one place it is decided.
+     *
+     * Everything language-dependent keys off this — which board is drawn, which lexicon and models
+     * are read. It is set only by [activateLanguage], which is fed only by Android's reported
+     * subtype, so there is exactly one answer at a time.
+     */
+    private var language = KeyboardLanguages.FALLBACK
+
+    /** The in-flight load of [language]'s engines, cancelled when the language changes again. */
+    private var languageResourcesJob: Job? = null
 
     /**
      * The key geometry currently used by both typing and gesture scoring.
@@ -540,93 +557,11 @@ class SlideInputMethodService :
             }
             .launchIn(scope)
 
-        // Roughly a megabyte to parse; doing it on the main thread would stall the first frame
-        // of the keyboard, which is the one moment the user is definitely watching.
-        scope.launch {
-            val (lexicon, bigrams, trigrams, decoder, trie) = withContext(Dispatchers.IO) {
-                val words = LexiconLoader.load(applicationContext)
-                // The model is keyed by lexicon index, so it is worthless without the lexicon and
-                // is not worth reading if that failed. A null model is survivable on its own: the
-                // corrector falls back to spelling alone.
-                val pairs = words?.let { BigramLoader.load(applicationContext, it) }
-                val triples = words?.let { TrigramLoader.load(applicationContext, it) }
-                val trie = words?.let(::SwipeLexiconTrie)
-                val loadedDecoder = words?.let {
-                    GestureDecoder(it, bigrams = pairs, trigrams = triples)
-                }
-                LoadedLanguageResources(words, pairs, triples, loadedDecoder, trie)
-            }
-            // Typing and swiping are the only paths that learn. Do not publish either engine until
-            // the persisted dictionaries have been restored, or a word learned in the gap could
-            // be wiped by restore completing a moment later.
-            learnedDataReady.await()
-            if (lexicon != null) {
-                gestureDecoder = decoder
-                typingSuggester = TypingSuggester(
-                    lexicon,
-                    bigrams = bigrams,
-                    trigrams = trigrams,
-                    userDictionary = userDictionary,
-                    userBigrams = userBigrams,
-                    spatialModel = spatialTouchModel,
-                    trie = requireNotNull(trie),
-                )
-                typingQuality.recordModelReadiness(
-                    QualityModel.TYPING_SUGGESTER,
-                    ModelReadiness.PRIMARY_READY,
-                )
-                typingQuality.recordModelReadiness(
-                    QualityModel.SWIPE_DECODER,
-                    ModelReadiness.FALLBACK_READY,
-                )
-                Log.i(
-                    TAG,
-                    "Deterministic decoder and suggester ready with ${lexicon.size} words" +
-                        (bigrams?.let { ", ${it.pairCount} bigrams" } ?: ", no bigrams") +
-                        (trigrams?.let { ", ${it.tripleCount} trigrams" } ?: ", no trigrams"),
-                )
-                updateGestureAvailability()
-
-                // Basic glide typing is ready before native model loading begins. The model is an
-                // optional promotion after it proves the complete tensor/search contract; a slow
-                // first copy or an incompatible runtime must never turn swipes into key slide-off.
-                var neural: NeuralGestureDecoder? = null
-                try {
-                    withContext(Dispatchers.IO) {
-                        neural = NeuralGestureDecoder.createOrNull(
-                            context = applicationContext,
-                            lexicon = lexicon,
-                            bigrams = bigrams,
-                            userBigrams = userBigrams,
-                            trie = requireNotNull(trie),
-                            trigrams = trigrams,
-                            fallback = requireNotNull(decoder),
-                        )
-                    }
-                    val ready = neural ?: return@launch
-                    gestureDecoder = ready
-                    neural = null // Ownership transfers to the service and is released in onDestroy.
-                    typingQuality.recordModelReadiness(
-                        QualityModel.SWIPE_DECODER,
-                        ModelReadiness.PRIMARY_READY,
-                    )
-                    Log.i(TAG, "Neural swipe passed its known-trace health check and is ready")
-                } finally {
-                    // Cancellation can arrive while native loading is not interruptible. Keeping
-                    // the candidate in this outer variable ensures that late result is still closed.
-                    neural?.close()
-                }
-            } else {
-                typingQuality.recordModelReadiness(
-                    QualityModel.TYPING_SUGGESTER,
-                    ModelReadiness.UNAVAILABLE,
-                )
-                typingQuality.recordModelReadiness(
-                    QualityModel.SWIPE_DECODER,
-                    ModelReadiness.UNAVAILABLE,
-                )
-            }
-        }
+        // The current subtype is read here as well as being pushed at us by the framework, so that
+        // opening the keyboard with the Spanish subtype already selected loads Spanish from the
+        // first frame rather than after a callback that may or may not arrive first.
+        language = KeyboardLanguages.resolve(reportedSubtypeLanguage())
+        loadLanguageResources(language)
 
         // Loaded separately from the lexicon so a slow font scan cannot hold up gesture typing,
         // which the user is far more likely to reach for in the first seconds after opening.
@@ -653,6 +588,201 @@ class SlideInputMethodService :
         val decoder: GestureDecodingEngine?,
         val trie: SwipeLexiconTrie?,
     )
+
+    /**
+     * Resolves and switches the whole keyboard to [subtypeLanguageTag] — the one place a language
+     * becomes active.
+     *
+     * Fed only by Android's reported subtype. A second way in (a settings toggle, a board's own
+     * tag) would be a second answer to the same question, and getting that wrong is quiet rather
+     * than loud: a Spanish board over an English dictionary, every piece behaving as designed.
+     *
+     * The previous language's engines are dropped before the new ones load, not after. A Spanish
+     * swipe decoded by the English model is a confident, fluent, wrong word, which is worse than a
+     * swipe that does nothing, and the window is a keystroke wide.
+     */
+    private fun activateLanguage(subtypeLanguageTag: String?) {
+        val resolved = KeyboardLanguages.resolve(subtypeLanguageTag)
+        if (resolved == language) return
+        language = resolved
+        gestureKeyMapCache = null
+        cancelGestureInputSequence()
+        gestureDecoder = null
+        typingSuggester = null
+        clearSuggestions()
+        editorBaseLayout = layoutFor(editorInputPolicy.keyboardMode)
+        keyboardView?.keyboardLayout = layoutFor(layer)
+        updateGestureAvailability()
+        loadLanguageResources(resolved)
+    }
+
+    /** Whatever Android reports as the current subtype's language tag, or null if it cannot be read. */
+    private fun reportedSubtypeLanguage(): String? = try {
+        (getSystemService(Context.INPUT_METHOD_SERVICE) as? InputMethodManager)
+            ?.currentInputMethodSubtype
+            ?.languageTag
+    } catch (e: Exception) {
+        // Only informational: the subtype callback still arrives with the same answer, and the
+        // resolver falls back to English either way.
+        Log.w(TAG, "Could not read the current input method subtype", e)
+        null
+    }
+
+    /**
+     * The globe key: asks Android to move to the next enabled subtype of this keyboard.
+     *
+     * Deliberately not a language toggle of our own. A subtype is this input method's own
+     * declaration of what it can type and Android owns the list of enabled ones, so stepping to the
+     * next entry of that list is the same act the system's language switch performs — and it leaves
+     * [activateLanguage] the only thing that decides which language is active, instead of giving
+     * this key a second opinion about it.
+     *
+     * Every failure is a no-op: one enabled subtype, an unreadable list, or a switch the platform
+     * declines all leave the keyboard exactly as it was, which is what this key did before there
+     * was a second language to switch to.
+     */
+    private fun switchToNextLanguage() {
+        val manager = getSystemService(Context.INPUT_METHOD_SERVICE) as? InputMethodManager ?: return
+        // This service is the input method being switched within, so its own component is the id
+        // `switchInputMethod` wants: a switch to a subtype of some other keyboard would be a
+        // switch to a different keyboard, not to this one's next language.
+        val self = ComponentName(this, javaClass)
+        try {
+            val info = manager.inputMethodList.firstOrNull { it.packageName == packageName } ?: return
+            val subtypes = manager.getEnabledInputMethodSubtypeList(info, true).orEmpty()
+            if (subtypes.size < 2) return
+            val current = manager.currentInputMethodSubtype
+            // Not finding the current subtype means the list moved under us; starting at the first
+            // entry is still a switch forward, and switching is all this key promises.
+            val index = subtypes.indexOfFirst { it == current }
+            val next = subtypes[(index + 1) % subtypes.size]
+            switchInputMethod(self.flattenToShortString(), next)
+        } catch (e: Exception) {
+            Log.w(TAG, "Could not switch to the next keyboard language", e)
+        }
+    }
+
+    override fun onCurrentInputMethodSubtypeChanged(newSubtype: InputMethodSubtype?) {
+        super.onCurrentInputMethodSubtypeChanged(newSubtype)
+        // The system's keyboard-language list is the whole of the selection UI: whichever subtype it
+        // switches to is the language, and nothing else on this keyboard gets a vote.
+        activateLanguage(newSubtype?.languageTag)
+    }
+
+    /**
+     * Loads and publishes [requested]'s lexicon and models, replacing whatever language was live.
+     *
+     * Only one language's engines are resident at a time. They do not need to be: the keyboard
+     * switches language by the user's own action, and two lexicons in memory would be two megabytes
+     * to hold for a choice that is nearly always made once.
+     *
+     * Roughly a megabyte to parse; doing it on the main thread would stall the first frame of the
+     * keyboard, which is the one moment the user is definitely watching.
+     */
+    private fun loadLanguageResources(requested: String) {
+        val previous = languageResourcesJob
+        languageResourcesJob = scope.launch {
+            // Asked before anything is read, because it decides whether a gesture engine is loaded
+            // at all: a language with no trained model gets none, so a swipe cannot be answered
+            // with another language's word. See GestureModels.
+            val hasSwipeModel = GestureModels.supports(requested)
+            val (lexicon, bigrams, trigrams, decoder, trie) = withContext(Dispatchers.IO) {
+                val words = LexiconLoader.load(applicationContext, requested)
+                // The model is keyed by lexicon index, so it is worthless without the lexicon and
+                // is not worth reading if that failed. A null model is survivable on its own: the
+                // corrector falls back to spelling alone.
+                val pairs = words?.let { BigramLoader.load(applicationContext, requested, it) }
+                val triples = words?.let { TrigramLoader.load(applicationContext, requested, it) }
+                val trie = words?.let(::SwipeLexiconTrie)
+                val loadedDecoder = if (hasSwipeModel) {
+                    // GestureModels owns the model policy: it returns an engine only for a language
+                    // whose swipe model actually shipped, and null otherwise, so a language without
+                    // one cannot be typed at from an English word shape.
+                    words?.let { GestureModels.deterministicDecoderFor(requested, it, pairs, triples) }
+                } else {
+                    null
+                }
+                LoadedLanguageResources(words, pairs, triples, loadedDecoder, trie)
+            }
+            // Typing and swiping are the only paths that learn. Do not publish either engine until
+            // the persisted dictionaries have been restored, or a word learned in the gap could
+            // be wiped by restore completing a moment later.
+            learnedDataReady.await()
+            // A faster switch may have landed while this was reading: the language wanted now is
+            // the one the caller has already moved to, not the one this coroutine started for.
+            if (language != requested) return@launch
+            if (lexicon != null) {
+                gestureDecoder = decoder
+                typingSuggester = TypingSuggester(
+                    lexicon,
+                    bigrams = bigrams,
+                    trigrams = trigrams,
+                    userDictionary = userDictionary,
+                    userBigrams = userBigrams,
+                    spatialModel = spatialTouchModel,
+                    trie = requireNotNull(trie),
+                )
+                typingQuality.recordModelReadiness(
+                    QualityModel.TYPING_SUGGESTER,
+                    ModelReadiness.PRIMARY_READY,
+                )
+                typingQuality.recordModelReadiness(
+                    QualityModel.SWIPE_DECODER,
+                    if (hasSwipeModel) ModelReadiness.FALLBACK_READY else ModelReadiness.UNAVAILABLE,
+                )
+                Log.i(
+                    TAG,
+                    "Language $requested ready with ${lexicon.size} words" +
+                        (bigrams?.let { ", ${it.pairCount} bigrams" } ?: ", no bigrams") +
+                        (trigrams?.let { ", ${it.tripleCount} trigrams" } ?: ", no trigrams") +
+                        if (hasSwipeModel) "" else ", no swipe model: gesture typing off",
+                )
+                updateGestureAvailability()
+
+                // Basic glide typing is ready before native model loading begins. The model is an
+                // optional promotion after it proves the complete tensor/search contract; a slow
+                // first copy or an incompatible runtime must never turn swipes into key slide-off.
+                var neural: NeuralGestureDecoder? = null
+                try {
+                    if (hasSwipeModel) {
+                        withContext(Dispatchers.IO) {
+                            neural = NeuralGestureDecoder.createOrNull(
+                                context = applicationContext,
+                                lexicon = lexicon,
+                                bigrams = bigrams,
+                                userBigrams = userBigrams,
+                                trie = requireNotNull(trie),
+                                trigrams = trigrams,
+                                fallback = requireNotNull(decoder),
+                            )
+                        }
+                    }
+                    val ready = neural ?: return@launch
+                    gestureDecoder = ready
+                    neural = null // Ownership transfers to the service and is released in onDestroy.
+                    typingQuality.recordModelReadiness(
+                        QualityModel.SWIPE_DECODER,
+                        ModelReadiness.PRIMARY_READY,
+                    )
+                    Log.i(TAG, "Neural swipe passed its known-trace health check and is ready")
+                } finally {
+                    // Cancellation can arrive while native loading is not interruptible. Keeping
+                    // the candidate in this outer variable ensures that late result is still closed.
+                    neural?.close()
+                }
+            } else {
+                typingQuality.recordModelReadiness(
+                    QualityModel.TYPING_SUGGESTER,
+                    ModelReadiness.UNAVAILABLE,
+                )
+                typingQuality.recordModelReadiness(
+                    QualityModel.SWIPE_DECODER,
+                    ModelReadiness.UNAVAILABLE,
+                )
+            }
+        }
+        previous?.cancel()
+    }
 
     override fun onCreateInputView(): View {
         val colours = resolveColours()
@@ -1188,9 +1318,12 @@ class SlideInputMethodService :
                 false
             }
             KeyType.SETTINGS -> false
-            // The globe renders and is announced, but picks nothing until a second language
-            // ships; pressing it must not fall through to a character commit.
-            KeyType.LANGUAGE -> false
+            // The globe asks the system for its next enabled subtype of this keyboard. It picks
+            // nothing itself: which language is active stays activateLanguage's answer alone.
+            KeyType.LANGUAGE -> {
+                switchToNextLanguage()
+                false
+            }
             KeyType.CHARACTER -> if (editorInputPolicy.usesRawKeyEvents) {
                 handleRawText(connection, appliedText)
             } else {
@@ -3442,27 +3575,38 @@ class SlideInputMethodService :
         Layer.SYMBOLS_ALT -> Layouts.SymbolsAltEn
     }
 
-    private fun layoutFor(mode: EditorKeyboardMode): KeyboardLayout = when (mode) {
-        EditorKeyboardMode.TEXT -> Layouts.HexQwertyEn
-        EditorKeyboardMode.EMAIL -> Layouts.EmailEn
-        EditorKeyboardMode.URI -> Layouts.UriEn
-        EditorKeyboardMode.NUMBER, EditorKeyboardMode.PIN -> Layouts.NumberPad
-        EditorKeyboardMode.SIGNED_NUMBER -> Layouts.SignedNumberPad
-        EditorKeyboardMode.DECIMAL_NUMBER -> Layouts.DecimalPad
-        EditorKeyboardMode.SIGNED_DECIMAL_NUMBER -> Layouts.SignedDecimalPad
-        EditorKeyboardMode.PHONE -> Layouts.PhonePad
-        EditorKeyboardMode.DATE -> Layouts.DatePad
-        EditorKeyboardMode.TIME -> Layouts.TimePad
-        EditorKeyboardMode.DATETIME -> Layouts.DateTimePad
+    /**
+     * The board for an editor mode, in the active language.
+     *
+     * The number, phone, date and time pads are language-independent — they are digits and
+     * separators — but they come from the same table so there is one place that answers "which
+     * board for this mode" rather than a language-aware answer beside a fixed one.
+     */
+    private fun layoutFor(mode: EditorKeyboardMode): KeyboardLayout {
+        val boards = Layouts.boardsFor(language)
+        return when (mode) {
+            EditorKeyboardMode.TEXT -> boards.hex
+            EditorKeyboardMode.EMAIL -> boards.email
+            EditorKeyboardMode.URI -> boards.uri
+            EditorKeyboardMode.NUMBER, EditorKeyboardMode.PIN -> Layouts.NumberPad
+            EditorKeyboardMode.SIGNED_NUMBER -> Layouts.SignedNumberPad
+            EditorKeyboardMode.DECIMAL_NUMBER -> Layouts.DecimalPad
+            EditorKeyboardMode.SIGNED_DECIMAL_NUMBER -> Layouts.SignedDecimalPad
+            EditorKeyboardMode.PHONE -> Layouts.PhonePad
+            EditorKeyboardMode.DATE -> Layouts.DatePad
+            EditorKeyboardMode.TIME -> Layouts.TimePad
+            EditorKeyboardMode.DATETIME -> Layouts.DateTimePad
+        }
     }
 
     private fun updateGestureAvailability() {
-        keyboardView?.gestureTypingAvailable =
-            settings.gestureTypingEnabled &&
-            editorInputPolicy.allowsSuggestions &&
-            gestureDecoder != null &&
-            layer == Layer.ALPHA &&
-            !anyPanelShown
+        keyboardView?.gestureTypingAvailable = GestureAvailability.available(
+            gestureTypingEnabled = settings.gestureTypingEnabled,
+            suggestionsAllowed = editorInputPolicy.allowsSuggestions,
+            decoder = gestureDecoder,
+            alphaLayer = layer == Layer.ALPHA,
+            panelShown = anyPanelShown,
+        )
     }
 
     // endregion

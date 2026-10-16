@@ -1,6 +1,7 @@
 # Generated data provenance
 
-Slide ships generated emoji and English-language data. The generated files are committed so an
+Slide ships generated emoji data and one data set per language it can type (English, Spanish).
+The generated files are committed so an
 ordinary app build needs no corpus download. `tools/language_sources.json` is the machine-readable
 lock for both their inputs and outputs; SHA-256 plus byte length, not a branch name or HTTP URL,
 defines each input.
@@ -14,12 +15,16 @@ defines each input.
 | CLDR English derived annotations | `unicode-org/cldr` commit `f67d16c9f472012cf324b36ce37cf757d3185cc8` | `c3d08ed66d4f840ba8b1202a5c7f6c4336e3c65363c08144811dc3f587e92a80` |
 | AOSP LatinIME English wordlist | LineageOS commit `c692b1224009953fb4677c99ad498e13bad6c85f` | `07682388185c285d307e341d1733331af8699f735b4137e9f22571017fab69d2` |
 | Tatoeba English sentences | Export snapshot last modified 2026-08-08 06:29:57 UTC | `34fc76cc177ca65b56cb3b966a2b8f33efd8a1b0551eb855f31b5ab940d05e60` |
+| AOSP LatinIME Spanish wordlist | LineageOS commit `c692b1224009953fb4677c99ad498e13bad6c85f` | `889ad52bce2933e2a30a0560b8d5a76f5334500e776a7db7c7cb3e9e79fc2652` |
+| Tatoeba Spanish sentences | Export snapshot last modified 2026-10-10 06:30:50 UTC | `d1f7aa997368571e8bbba341ab60f9145fefe14970f21065bd97be8e03c8e6fb` |
 
 The Unicode URL embeds the release, and the GitHub raw URLs embed full commits. Tatoeba does not
 publish a permanent dated per-language URL, so Slide preserves the exact authenticated compressed
 snapshot at `third_party/language-data/tatoeba-eng-sentences-2026-08-08.tsv.bz2`. The moving URL is
 only an origin record and refresh hint; ordinary reproduction reads the tracked archive, so it
-continues to work after upstream rotates. A newer export is never silently substituted.
+continues to work after upstream rotates. A newer export is never silently substituted. Spanish is
+snapshotted the same way at `third_party/language-data/tatoeba-spa-sentences-2026-10-10.tsv.bz2`,
+from its own per-language export rather than from a slice of the English one.
 
 ## Reproduce the committed assets
 
@@ -45,9 +50,11 @@ python3 tools/rebuild_language_assets.py \
     --sources-dir /tmp/slide-language-sources --check
 ```
 
-This rebuilds `emoji.bin`, `lexicon_en.bin`, `bigrams_en.bin`, `trigrams_en.bin`, and
-`heldout_en.txt`. It authenticates all inputs before parsing, checks every generated output against
-the output digest in the lock, and leaves the worktree untouched in check mode. `--write` performs
+This rebuilds `emoji.bin` plus each language's `lexicon_<lang>.bin`, `bigrams_<lang>.bin`,
+`trigrams_<lang>.bin` and `heldout_<lang>.txt` — English and Spanish today. `--language es` narrows
+it to one language; the emoji catalogue is shared and always rebuilt. It authenticates all inputs
+before parsing, checks every generated output against the output digest in the lock, and leaves the
+worktree untouched in check mode. `--write` performs
 the same checks before atomically replacing the committed files.
 
 ## Refresh a source
@@ -60,7 +67,7 @@ Treat a data refresh like a dependency update:
 3. Build into temporary outputs with the component builders, review parser statistics and the
    data/license change, then record the new generated-output SHA-256 values.
 4. Run `tools/rebuild_language_assets.py --write`, the Python provenance tests, and the complete
-   `:core` and `:engine` unit-test suites.
+   `:core`, `:engine` and `:ime` unit-test suites.
 5. Keep coupled data together: any lexicon change requires rebuilding both context models and the
    held-out sample because model entries are lexicon indices.
 

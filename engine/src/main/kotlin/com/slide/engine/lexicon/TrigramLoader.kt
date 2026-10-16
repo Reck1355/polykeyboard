@@ -9,7 +9,12 @@ import java.security.MessageDigest
 
 /** Reads the two-word-context model produced by `tools/build_bigrams.py`. */
 object TrigramLoader {
+
+    /** The English model, for the places that must name an asset without holding a language. */
     const val ASSET_NAME = "trigrams_en.bin"
+
+    /** The trigram model for [language] — `trigrams_es.bin` for Spanish. */
+    fun assetNameFor(language: String) = "trigrams_$language.bin"
 
     private const val TAG = "SlideTrigrams"
     private const val MAGIC = 0x53545249 // STRI
@@ -17,17 +22,21 @@ object TrigramLoader {
     private const val FINGERPRINT_BYTES = 32
 
     /**
-     * Loads the model, or returns null when it cannot be read or does not match the lexicon.
+     * Loads the model for [language], or returns null when it cannot be read or does not match the
+     * lexicon.
      *
      * As with [BigramLoader], every [Exception] is caught rather than [IOException] alone: a file
      * of the right length holding the wrong bytes fails an index check, and losing two-word
      * context has to stay better than a keyboard that dies whenever it opens.
      */
-    fun load(context: Context, lexicon: Lexicon): Trigrams? = try {
-        context.assets.open(ASSET_NAME).use { read(it, lexicon) }
-    } catch (e: Exception) {
-        Log.e(TAG, "Could not read $ASSET_NAME; using one-word context", e)
-        null
+    fun load(context: Context, language: String, lexicon: Lexicon): Trigrams? {
+        val name = assetNameFor(language)
+        return try {
+            context.assets.open(name).use { read(it, lexicon) }
+        } catch (e: Exception) {
+            Log.e(TAG, "Could not read $name; using one-word context", e)
+            null
+        }
     }
 
     fun read(input: InputStream, lexicon: Lexicon): Trigrams {

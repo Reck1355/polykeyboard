@@ -15,7 +15,7 @@ class NeuralGestureDecoderInstrumentedTest {
     fun loadsModelsAndDecodesPublishedComputerTrace() {
         val context = ApplicationProvider.getApplicationContext<android.content.Context>()
         val lexicon = requireNotNull(LexiconLoader.load(context))
-        val bigrams = BigramLoader.load(context, lexicon)
+        val bigrams = BigramLoader.load(context, LexiconLoader.LANGUAGE_DEFAULT, lexicon)
         val decoder = NeuralGestureDecoder.createOrNull(context, lexicon, bigrams, null)
         assertNotNull("Neural models did not load", decoder)
 
@@ -41,7 +41,7 @@ class NeuralGestureDecoderInstrumentedTest {
     fun decodesDonatedThatsTraceAsCommonContraction() {
         val context = ApplicationProvider.getApplicationContext<android.content.Context>()
         val lexicon = requireNotNull(LexiconLoader.load(context))
-        val bigrams = BigramLoader.load(context, lexicon)
+        val bigrams = BigramLoader.load(context, LexiconLoader.LANGUAGE_DEFAULT, lexicon)
         val decoder = requireNotNull(
             NeuralGestureDecoder.createOrNull(context, lexicon, bigrams, null),
         ) { "Neural models did not load" }

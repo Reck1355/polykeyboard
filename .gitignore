@@ -28,6 +28,13 @@ third_party/executorch/*.aar
 !engine/src/main/assets/trigrams_en.bin
 !core/src/main/assets/emoji.bin
 
+# Every language with a board ships the same three assets, and the same reason applies. The
+# generated-output lock in tools/language_sources.json names each one, so a language added to the
+# build plan without an exception here fails the source tests rather than quietly not shipping.
+!engine/src/main/assets/lexicon_es.bin
+!engine/src/main/assets/bigrams_es.bin
+!engine/src/main/assets/trigrams_es.bin
+
 # Local-only benchmark corpus slice (FUTO swipe dataset, 258 MiB upstream). Not redistributable
 # from this repo; fetch it and rebuild with tools or the snippet in docs/typing-quality-benchmarks.md.
 engine/src/androidTest/assets/swipe_benchmark_subset.jsonl

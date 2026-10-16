@@ -2,6 +2,8 @@
 <resources>
     <string name="ime_name">Slide</string>
     <string name="subtype_en">English (US)</string>
+    <!-- The name Android shows in its own keyboard-language list for the Spanish subtype. -->
+    <string name="subtype_es">Español (España)</string>
     <string name="mic_permission_denied_permanently">Voice typing needs the microphone. Allow the Microphone permission for Slide in Settings.</string>
     <string name="voice_error_still_closing">Voice typing is still closing</string>
     <string name="voice_error_permission">Microphone permission is needed for voice typing</string>

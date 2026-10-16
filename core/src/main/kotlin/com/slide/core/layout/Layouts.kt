@@ -98,6 +98,60 @@ object Layouts {
         ),
     )
 
+    /**
+     * The Spanish accents, in the order a Spanish speaker reaches for them.
+     *
+     * `ü` is here rather than on the `u` entry because that key offers two: the diaeresis is not an
+     * optional decoration in Spanish (`pingüino`, `vergüenza`), it is a different letter.
+     *
+     * Declared above [QwertyEs] because that board is built by calling [spanish] on the English
+     * keys: a `val` read by an earlier `val`'s initializer would still be null at that moment.
+     */
+    private val SPANISH_ACCENT_FIRST = mapOf(
+        "a" to listOf("á"),
+        "e" to listOf("é"),
+        "i" to listOf("í"),
+        "o" to listOf("ó"),
+        "u" to listOf("ú", "ü"),
+        "n" to listOf("ñ"),
+    )
+
+    /**
+     * One key of the Spanish board: the English key with the Spanish letters in front of its popup.
+     *
+     * `distinct` keeps the promotion from listing an accent twice — the English `a` popup already
+     * contains `á`, and a popup that offers the same character in two cells reads as two
+     * characters.
+     */
+    private fun spanish(key: Key): Key {
+        val accents = SPANISH_ACCENT_FIRST[key.label] ?: return key
+        return key.copy(alternates = (accents + key.alternates).distinct())
+    }
+
+    /**
+     * QWERTY with the Spanish accents on the letters that carry them.
+     *
+     * The letters are the English board's own keys at the English board's own positions, in the
+     * English board's own order, with the same widths, gaps and digit hints: a Spanish board that
+     * moved a key would cost a bilingual user the muscle memory of the one they already had. Only
+     * each key's long-press popup changes, and only by promoting the Spanish form of that letter
+     * to the front (ñ on the n key, and ü beside ú on the u key) — the rest of the English popup,
+     * accents and punctuation included, is still there behind it.
+     */
+    val QwertyEs = QwertyEn.copy(
+        id = "qwerty_es",
+        label = "Español (España)",
+        languageTag = KeyboardLanguages.SPANISH,
+        rows = QwertyEn.rows.map { row ->
+            KeyRow(
+                row.keys.map(::spanish),
+                row.leadingGap,
+                row.trailingGap,
+                row.heightWeight,
+            )
+        },
+    )
+
     /** QWERTY with the characters people need most often in an email address. */
     val EmailEn = QwertyEn.copy(
         id = "email_en",
@@ -130,7 +184,39 @@ object Layouts {
         ),
     )
 
-    /** The language switch — the globe. Inert until a second language ships. */
+    /** [EmailEn]'s board, in Spanish; the delimiters and the letter positions are identical. */
+    val EmailEs = QwertyEs.copy(
+        id = "email_es",
+        label = "Español (España)",
+        rows = QwertyEs.rows.dropLast(1) + KeyRow(
+            listOf(
+                toSymbols,
+                sym("@"),
+                Key(" ", KeyType.SPACE, output = " ", widthWeight = 3.5f, gestureEligible = false),
+                period,
+                Key(".com", KeyType.CHARACTER, output = ".com", widthWeight = 1.5f, gestureEligible = false),
+                enter,
+            ),
+        ),
+    )
+
+    /** [UriEn]'s board, in Spanish; the delimiters and the letter positions are identical. */
+    val UriEs = QwertyEs.copy(
+        id = "uri_es",
+        label = "Español (España)",
+        rows = QwertyEs.rows.dropLast(1) + KeyRow(
+            listOf(
+                toSymbols,
+                sym("/"),
+                Key(" ", KeyType.SPACE, output = " ", widthWeight = 3.5f, gestureEligible = false),
+                period,
+                Key(".com", KeyType.CHARACTER, output = ".com", widthWeight = 1.5f, gestureEligible = false),
+                enter,
+            ),
+        ),
+    )
+
+    /** The language switch — the globe. */
     private val globe = Key("\uD83C\uDF10", KeyType.LANGUAGE, gestureEligible = false)
 
     /**
@@ -180,6 +266,35 @@ object Layouts {
     )
 
     /**
+     * [HexQwertyEn]'s board in Spanish: the same honeycomb, over [QwertyEs]'s keys.
+     *
+     * The two differ only in the accents inside the letter popups, which is exactly the difference
+     * between [QwertyEn] and [QwertyEs]; the stagger, the widths, the bare hexagons and the bottom
+     * row are the English board's. The bottom row is shared rather than copied, because nothing in
+     * it is a letter and two boards that drifted apart there would be a difference no language
+     * asked for.
+     */
+    val HexQwertyEs = QwertyEs.copy(
+        id = ID_HEX_QWERTY_ES,
+        supportsNumberRow = false,
+        hexKeys = true,
+        rows = listOf(
+            KeyRow(QwertyEs.rows[0].keys.map { it.copy(hint = null) }),
+            KeyRow(
+                QwertyEs.rows[1].keys.map { it.copy(hint = null) },
+                HEX_ROW_OFFSET,
+                HEX_ROW_OFFSET,
+            ),
+            KeyRow(
+                listOf(shift.copy(widthWeight = 1f)) +
+                    QwertyEs.rows[2].keys.drop(1).dropLast(1) +
+                    listOf(delete.copy(widthWeight = 1f)),
+            ),
+            HexQwertyEn.rows[3],
+        ),
+    )
+
+    /**
      * The honeycomb's half-key stagger, in width units — 0.5 cells, one half of a key.
      *
      * Named here rather than written as a `0.5f` in each row so the invariant the drawing depends
@@ -189,6 +304,9 @@ object Layouts {
 
     /** Layout id of [HexQwertyEn], for the places that must name it without holding it. */
     const val ID_HEX_QWERTY = "hex_qwerty_en"
+
+    /** Layout id of [HexQwertyEs], its Spanish counterpart. */
+    const val ID_HEX_QWERTY_ES = "hex_qwerty_es"
 
     private fun digit(value: String, alternates: List<String> = emptyList()) =
         Key(value, KeyType.CHARACTER, alternates = alternates, gestureEligible = false)
@@ -375,4 +493,39 @@ object Layouts {
         } else {
             layout.copy(rows = listOf(numberRow) + layout.rows)
         }
+
+    /**
+     * Every board one language needs, in the shape the input method asks for them.
+     *
+     * The symbols pages are deliberately absent: `?123` and `=&#92;<` are the same characters in
+     * every language this keyboard ships, and duplicating them per language would be three more
+     * boards to keep identical for no difference the user could see.
+     */
+    data class LanguageBoards(
+        val qwerty: KeyboardLayout,
+        val hex: KeyboardLayout,
+        val email: KeyboardLayout,
+        val uri: KeyboardLayout,
+    )
+
+    /**
+     * The language-to-board table, the only thing that turns a resolved language into a board.
+     *
+     * Keyed by [KeyboardLanguages]'s own tags rather than by a copy of them so that a language
+     * added to one and not the other cannot compile a board table that disagrees with the
+     * resolver: [boardsFor] falls back to the entries under [KeyboardLanguages.FALLBACK].
+     */
+    private val BOARDS: Map<String, LanguageBoards> = mapOf(
+        KeyboardLanguages.FALLBACK to LanguageBoards(QwertyEn, HexQwertyEn, EmailEn, UriEn),
+        KeyboardLanguages.SPANISH to LanguageBoards(QwertyEs, HexQwertyEs, EmailEs, UriEs),
+    )
+
+    /**
+     * The boards for [language], or the fallback language's when this build ships none for it.
+     *
+     * Unsupported input cannot come from a resolved tag, but it can come from a caller that never
+     * resolved one, and a board with no dictionary behind it is worse than an English board.
+     */
+    fun boardsFor(language: String): LanguageBoards =
+        BOARDS[language] ?: BOARDS.getValue(KeyboardLanguages.FALLBACK)
 }

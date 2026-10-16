@@ -58,7 +58,7 @@ class RealSwipeNeuralBenchmarkTest {
 
         val context = instrumentation.targetContext
         val lexicon = requireNotNull(LexiconLoader.load(context))
-        val bigrams = BigramLoader.load(context, lexicon)
+        val bigrams = BigramLoader.load(context, LexiconLoader.LANGUAGE_DEFAULT, lexicon)
         val decoder = requireNotNull(
             NeuralGestureDecoder.createOrNull(context, lexicon, bigrams, null),
         ) { "Neural models did not load" }

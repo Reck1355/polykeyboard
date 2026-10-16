@@ -46,6 +46,25 @@
       "mutable_origin": true,
       "group": "context",
       "bundled_path": "third_party/language-data/tatoeba-eng-sentences-2026-08-08.tsv.bz2"
+    },
+    "aosp_spanish_wordlist": {
+      "filename": "aosp-es-wordlist.combined.gz",
+      "retrieval_url": "https://raw.githubusercontent.com/LineageOS/android_packages_inputmethods_LatinIME/c692b1224009953fb4677c99ad498e13bad6c85f/dictionaries/es_wordlist.combined.gz",
+      "revision": "LineageOS/android_packages_inputmethods_LatinIME c692b1224009953fb4677c99ad498e13bad6c85f",
+      "sha256": "889ad52bce2933e2a30a0560b8d5a76f5334500e776a7db7c7cb3e9e79fc2652",
+      "size": 1165885,
+      "mutable_origin": false,
+      "group": "lexicon"
+    },
+    "tatoeba_spanish_sentences": {
+      "filename": "tatoeba-spa-sentences-2026-10-10.tsv.bz2",
+      "retrieval_url": "https://downloads.tatoeba.org/exports/per_language/spa/spa_sentences.tsv.bz2",
+      "revision": "Tatoeba Spanish per-language export, last modified 2026-10-10T06:30:50Z",
+      "sha256": "d1f7aa997368571e8bbba341ab60f9145fefe14970f21065bd97be8e03c8e6fb",
+      "size": 6361569,
+      "mutable_origin": true,
+      "group": "context",
+      "bundled_path": "third_party/language-data/tatoeba-spa-sentences-2026-10-10.tsv.bz2"
     }
   },
   "generated_outputs": {
@@ -53,6 +72,10 @@
     "engine/src/main/assets/lexicon_en.bin": "9dac9defeb43453fb98a14b5ffa1e54aa112a4b3c6a1a5959090f79cc3d96e26",
     "engine/src/main/assets/bigrams_en.bin": "7e07306e153a0e4a1429e6fc8d0aa3c1be6f0bf20b78459d2c69deb80d8c37f3",
     "engine/src/main/assets/trigrams_en.bin": "dd85903183a89ddd957978636e5366e1e11e2aed14ef5d8c9b13abea48dcb3e1",
-    "engine/src/test/resources/heldout_en.txt": "53887968dced24db0a188270f8e452ede1e5bdebdfcd12cfaf189d7e662a848c"
+    "engine/src/test/resources/heldout_en.txt": "53887968dced24db0a188270f8e452ede1e5bdebdfcd12cfaf189d7e662a848c",
+    "engine/src/main/assets/lexicon_es.bin": "17164dbbce2959ce6fc9cde6f27a2af343707dc8a01685498f17e8d0b6cc45e4",
+    "engine/src/main/assets/bigrams_es.bin": "6f4e760f70897c23b7debb03ff2e461cbb8e9bf4bbb77a5a1792566b4d63f3b0",
+    "engine/src/main/assets/trigrams_es.bin": "6ba02a8c1f11502c8fdb1c5c8b0be890e3c4854ffb830635ded5d7962bb22883",
+    "engine/src/test/resources/heldout_es.txt": "ce31776f57b2cfeaa76d247fbdc554474d997be4e9c20ba070fee44956dc64dc"
   }
 }

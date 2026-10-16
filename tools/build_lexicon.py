@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Converts the AOSP LatinIME combined wordlist into Slide's packed lexicon asset.
+Converts an AOSP LatinIME combined wordlist into Slide's packed lexicon asset.
 
 Source:  dictionaries/en_wordlist.combined.gz from AOSP LatinIME (Apache-2.0).
 Output:  engine/src/main/assets/lexicon_en.bin
@@ -18,12 +18,21 @@ read the whole file sequentially at startup anyway.
     [freqs]         word count x u8   (0-255, AOSP's own scale)
     [flags]         word count x u8   (see FLAG_* below)
 
+`--alphabet` chooses which letters may appear in a stored word. It is per language and
+deliberately explicit rather than inferred from the source, because the alphabet is a
+property of the asset being built and not of whichever dictionary happens to be on the
+command line: `ascii` is English (and reproduces every English asset byte for byte),
+`latin` adds the accented letters Spanish needs. Widening the alphabet by default would
+silently drop or admit entries in the other language's asset.
+
 Usage:
-    python3 tools/build_lexicon.py /tmp/aosp_en.txt engine/src/main/assets/lexicon_en.bin
+    python3 tools/build_lexicon.py [--alphabet ascii|latin] /tmp/aosp_en.txt \
+        engine/src/main/assets/lexicon_en.bin
 """
 
 from __future__ import annotations
 
+import argparse
 import re
 import struct
 import sys
@@ -45,7 +54,18 @@ FLAG_CAPITALIZED = 1 << 2
 # one for "september", so the lexicon is keyed lowercase and FLAG_CAPITALIZED restores the
 # capital at output time. Dropping these outright would lose months, countries and given
 # names -- about a third of the wordlist.
-WORD_RE = re.compile(r"^[A-Za-z][A-Za-z']*$")
+#
+# The two alphabets differ only in which accented letters they admit. `latin` covers the
+# Latin-1 letters Spanish uses (á é í ó ú ü ñ and their uppercase forms), minus the
+# multiplication and division signs that sit inside those code-point ranges.
+ASCII_WORD_RE = re.compile(r"^[A-Za-z][A-Za-z']*$")
+LATIN_LETTERS = "A-Za-z\u00c0-\u00d6\u00d8-\u00f6\u00f8-\u00ff"
+LATIN_WORD_RE = re.compile(f"^[{LATIN_LETTERS}][{LATIN_LETTERS}']*$")
+
+ALPHABETS = {
+    "ascii": ASCII_WORD_RE,
+    "latin": LATIN_WORD_RE,
+}
 
 # AOSP marks a handful of entries as deliberate non-words (typo targets and the like).
 # Those must never surface as a gesture candidate.
@@ -54,7 +74,8 @@ DROPPED_FLAGS = {"nonword"}
 LINE_RE = re.compile(r"^ word=(?P<word>[^,]+),f=(?P<freq>-?\d+),flags=(?P<flags>[^,]*)")
 
 
-def parse(source: Path) -> list[tuple[str, int, int]]:
+def parse(source: Path, alphabet: str = "ascii") -> list[tuple[str, int, int]]:
+    word_re = ALPHABETS[alphabet]
     entries: dict[str, tuple[int, int]] = {}
     # Tracks whether a key was ever seen in lowercase. "March" and "march" are both real
     # words; when both exist the lowercase spelling wins so we never capitalise mid-sentence.
@@ -74,7 +95,7 @@ def parse(source: Path) -> list[tuple[str, int, int]]:
             if raw_flags & DROPPED_FLAGS:
                 skipped_nonword += 1
                 continue
-            if not WORD_RE.match(word):
+            if not word_re.match(word):
                 skipped_shape += 1
                 continue
 
@@ -105,8 +126,9 @@ def parse(source: Path) -> list[tuple[str, int, int]]:
         entries[key] = (freq, flags & ~FLAG_CAPITALIZED)
 
     capitalised = sum(1 for freq, flags in entries.values() if flags & FLAG_CAPITALIZED)
+    print(f"  alphabet      {alphabet}")
     print(f"  kept          {len(entries)} ({capitalised} rendered capitalised)")
-    print(f"  dropped shape {skipped_shape} (digits, symbols, accents, hyphens)")
+    print(f"  dropped shape {skipped_shape} (digits, symbols, accents outside the alphabet, hyphens)")
     print(f"  dropped nonword {skipped_nonword}")
 
     return sorted((word, freq, flags) for word, (freq, flags) in entries.items())
@@ -146,16 +168,23 @@ def encode(entries: list[tuple[str, int, int]]) -> bytes:
     return bytes(out)
 
 
-def main() -> int:
-    if len(sys.argv) != 3:
-        print(__doc__)
-        return 2
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description="Pack an AOSP combined wordlist into a Slide lexicon.")
+    parser.add_argument("source", type=Path)
+    parser.add_argument("target", type=Path)
+    parser.add_argument(
+        "--alphabet",
+        choices=sorted(ALPHABETS),
+        default="ascii",
+        help="letters a stored word may contain (default: ascii, English)",
+    )
+    args = parser.parse_args(argv)
 
-    source = Path(sys.argv[1])
-    target = Path(sys.argv[2])
+    source = args.source
+    target = args.target
 
     print(f"reading {source}")
-    entries = parse(source)
+    entries = parse(source, args.alphabet)
     if not entries:
         print("no entries parsed - is this an AOSP combined wordlist?", file=sys.stderr)
         return 1

@@ -18,7 +18,16 @@ import java.security.MessageDigest
  */
 object BigramLoader {
 
+    /** The English model, for the places that must name an asset without holding a language. */
     const val ASSET_NAME = "bigrams_en.bin"
+
+    /**
+     * The bigram model for [language] — `bigrams_es.bin` for Spanish.
+     *
+     * [language] is a resolved tag from `KeyboardLanguages`. The model is addressed by the same
+     * name the lexicon is, so the two cannot be paired up across languages.
+     */
+    fun assetNameFor(language: String) = "bigrams_$language.bin"
 
     private const val TAG = "SlideBigrams"
     private const val MAGIC = 0x53424947 // "SBIG"
@@ -26,8 +35,8 @@ object BigramLoader {
     private const val LEXICON_FINGERPRINT_BYTES = 32
 
     /**
-     * Loads the model, or returns null if the asset is missing, unreadable, or built against a
-     * different lexicon.
+     * Loads the model for [language], or returns null if the asset is missing, unreadable, or built
+     * against a different lexicon.
      *
      * Null is survivable: every candidate simply scores as it did before there was a model at all,
      * so the keyboard corrects on spelling alone rather than refusing to correct. Catching every
@@ -35,11 +44,16 @@ object BigramLoader {
      * length but the wrong content, which fails an index check rather than a read; there is no
      * exception handler on the IME scope this runs in. Errors still propagate.
      */
-    fun load(context: Context, lexicon: Lexicon): Bigrams? = try {
-        context.assets.open(ASSET_NAME).use { read(it, lexicon) }
-    } catch (e: Exception) {
-        Log.e(TAG, "Could not read $ASSET_NAME; corrections will not use context", e)
-        null
+    fun load(context: Context, language: String, lexicon: Lexicon): Bigrams? {
+        // The fingerprint below is the model's own proof that it was built against the lexicon it
+        // was handed, so a model from the wrong language is rejected rather than mis-scored.
+        val name = assetNameFor(language)
+        return try {
+            context.assets.open(name).use { read(it, lexicon) }
+        } catch (e: Exception) {
+            Log.e(TAG, "Could not read $name; corrections will not use context", e)
+            null
+        }
     }
 
     fun read(input: InputStream, lexicon: Lexicon): Bigrams {
@@ -161,10 +175,16 @@ object BigramLoader {
     }
 
     /**
-     * Hashes the exact index order without allocating a String for each of the 160k words.
+     * Hashes the exact index order without allocating a String for each of the 200k words.
      *
-     * Both asset builders guarantee lowercase ASCII. NUL cannot occur in a word, so delimiting
-     * each one with it keeps sequences such as ("ab", "c") distinct from ("a", "bc").
+     * Both asset builders guarantee lowercase letters of their language's alphabet. NUL cannot
+     * occur in a word, so delimiting each one with it keeps sequences such as ("ab", "c") distinct
+     * from ("a", "bc").
+     *
+     * The identity of a character here is its low byte, which is exact for every letter the two
+     * builders admit — Basic Latin and Latin-1, both of which the lexicon loader has already
+     * rejected anything wider than. `tools/build_bigrams.py` encodes the same way (latin-1), and
+     * the two must keep agreeing or a valid model is refused as built for another lexicon.
      */
     private fun matchesLexiconFingerprint(lexicon: Lexicon, expected: ByteArray): Boolean {
         val digest = MessageDigest.getInstance("SHA-256")

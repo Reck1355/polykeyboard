@@ -12,4 +12,19 @@
         android:imeSubtypeMode="keyboard"
         android:isAsciiCapable="true" />
 
+    <!--
+        Spanish (Spain). Declared beside English rather than replacing it: Android's keyboard
+        language list is populated from these entries, so this one line is what makes Spanish
+        selectable, and the English entry above is untouched so English's own selection is
+        unchanged. isAsciiCapable is deliberately absent: that flag is the hint that lets the
+        system fall back to an ASCII keyboard for a field that refuses non-ASCII input, and
+        labelling a Spanish subtype as ASCII-capable would offer it in exactly the places its
+        accents cannot be typed.
+    -->
+    <subtype
+        android:label="@string/subtype_es"
+        android:imeSubtypeLocale="es_ES"
+        android:languageTag="es-ES"
+        android:imeSubtypeMode="keyboard" />
+
 </input-method>

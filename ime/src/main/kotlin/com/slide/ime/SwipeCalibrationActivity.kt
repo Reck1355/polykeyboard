@@ -220,7 +220,7 @@ class SwipeCalibrationActivity : Activity(), KeyboardView.Listener {
             if (decoder == null) {
                 val appContext = applicationContext
                 val lexicon = LexiconLoader.load(appContext) ?: return@execute
-                val bigrams = BigramLoader.load(appContext, lexicon)
+                val bigrams = BigramLoader.load(appContext, LexiconLoader.LANGUAGE_DEFAULT, lexicon)
                 decoder = NeuralGestureDecoder.createOrNull(appContext, lexicon, bigrams, null)
             }
             val active = decoder ?: return@execute
