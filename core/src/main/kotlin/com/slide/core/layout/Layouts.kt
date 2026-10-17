@@ -261,23 +261,24 @@ object Layouts {
                 HEX_ROW_OFFSET,
             ),
             KeyRow(
-                // Backspace used to sit at this row's end, which meant reaching past the letters for
-                // it: it landed beside M, one slip from the letter a thumb had just typed. It is on
-                // the bottom row, at the space bar's right, and the caps key has come up here in its
-                // place. Caps is not destructive, so reaching past the letters for it costs a
-                // mis-tap and nothing else. Seven letters alone would leave half a cell of slack on
-                // each side while the row above sits half a cell in, which steps a whole cell
-                // instead of half of one; the shift key fills the eighth, so the row is centred on
-                // the ten-cell grid and still half a cell out of step with its neighbours.
-                QwertyEn.rows[2].keys.drop(1).dropLast(1) + listOf(shift.copy(widthWeight = 1f)),
+                // The eighth cell is the period, not the caps key: he moved the period up here and
+                // the caps down to the bottom row's left end, where the backspace had been. Seven
+                // letters alone would leave half a cell of slack on each side while the row above
+                // sits half a cell in, which steps a whole cell instead of half of one; the period
+                // fills the eighth, so the row is centred on the ten-cell grid and still half a cell
+                // out of step with its neighbours.
+                QwertyEn.rows[2].keys.drop(1).dropLast(1) + listOf(period.copy(widthWeight = 1f)),
                 leadingGap = 1f,
                 trailingGap = 1f,
             ),
             KeyRow(
                 // Two keys, a three-cell space, two keys: seven cells, one hex in from each edge
                 // more than the row above, so the board narrows by a cell a side all the way down —
-                // ten, nine, eight, seven. The backspace sits at the space bar's left and the enter
-                // at its right, which is where his thumbs went looking for them.
+                // ten, nine, eight, seven. His arrangement: the comma keeps the left end, the caps
+                // takes the slot the backspace held beside the space bar, the enter stays at the
+                // space bar's right, and the backspace takes the row's right end where the period
+                // used to be - which is where a stock keyboard puts it, so the thumb already knows
+                // the way.
                 //
                 // Seven is also the smallest row that centres on the ten-cell grid and stays half a
                 // cell out of step with the row above, and the space keeps all three of its cells:
@@ -285,14 +286,13 @@ object Layouts {
                 // three is the fewest that still gives each thumb two.
                 //
                 // The width came from `?123`, which is a mode rather than a character and now sits
-                // on the strip with the emoji and the language switch. The comma and the period
-                // keep their places at this row's ends rather than being spent on it.
+                // on the strip with the emoji and the language switch.
                 listOf(
                     comma,
-                    delete.copy(widthWeight = 1f),
+                    shift.copy(widthWeight = 1f),
                     space.copy(widthWeight = 3f),
                     enter.copy(widthWeight = 1f),
-                    period,
+                    delete.copy(widthWeight = 1f),
                 ),
                 leadingGap = 1.5f,
                 trailingGap = 1.5f,
@@ -321,11 +321,11 @@ object Layouts {
                 HEX_ROW_OFFSET,
             ),
             KeyRow(
-                // Backspace has moved to the bottom row, which Spanish shares with English, so this
-                // row is the letters plus the caps key English carries at its right end: eight
+                // The bottom row is shared with English, so this row takes the same eighth key
+                // English does: the period, with the caps key down on the shared bottom row. Eight
                 // cells, centred, and half a cell out of step with the row above. The two boards
                 // have to be the same board or a bilingual user loses one of them.
-                QwertyEs.rows[2].keys.drop(1).dropLast(1) + listOf(shift.copy(widthWeight = 1f)),
+                QwertyEs.rows[2].keys.drop(1).dropLast(1) + listOf(period.copy(widthWeight = 1f)),
                 leadingGap = 1f,
                 trailingGap = 1f,
             ),

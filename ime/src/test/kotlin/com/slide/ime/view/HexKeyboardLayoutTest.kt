@@ -183,25 +183,26 @@ class HexKeyboardLayoutTest {
     }
 
     @Test
-    fun `the bottom row is comma, backspace, space, enter, period`() {
+    fun `the bottom row is comma, caps, space, enter, backspace`() {
         val bottom = rowKeys(placed(), 3)
 
         assertEquals(
             listOf(
                 KeyType.CHARACTER,
-                KeyType.DELETE,
+                KeyType.SHIFT,
                 KeyType.SPACE,
                 KeyType.ENTER,
-                KeyType.CHARACTER,
+                KeyType.DELETE,
             ),
             bottom.map { it.key.type },
         )
         assertEquals(",", bottom[0].key.label)
-        assertEquals(".", bottom[4].key.label)
-        // The backspace sits at the space bar's left and the enter at its right, on his word: the
-        // two sides were the other way round in the first pass and he corrected them.
-        assertEquals(KeyType.DELETE, bottom[1].key.type)
+        // His last arrangement, and the third the row has had: the caps took the backspace's slot
+        // beside the space bar, the enter stayed at the space bar's right, and the backspace went
+        // out to the row's right end, where the period had been and where a stock keyboard puts it.
+        assertEquals(KeyType.SHIFT, bottom[1].key.type)
         assertEquals(KeyType.ENTER, bottom[3].key.type)
+        assertEquals(KeyType.DELETE, bottom[4].key.type)
         // A hex and a half at each end: seven cells centred on the ten-cell grid, so the board
         // narrows a cell a side all the way down and the row above is still half a cell out of step.
         assertEquals(1.5f * cellWidth, bottom.first().left, 0.01f)
@@ -209,48 +210,50 @@ class HexKeyboardLayoutTest {
     }
 
     @Test
-    fun `backspace is not beside a letter, and caps beside one is deliberate`() {
+    fun `no destructive key sits at the end of a letter row`() {
         val keys = placed()
 
-        // Backspace sat at the end of the z-row, one slip from the M a thumb had just pressed. It
-        // is not on a letter row now, and that rule is the one that holds: a destructive key at the
-        // end of a letter row is a mis-tap that eats the letter just typed.
+        // Backspace sat at the end of the z-row once, one slip from the M a thumb had just pressed.
+        // It has not been back: the rule that holds is that a destructive key at the end of a letter
+        // row is a mis-tap that eats the letter just typed. Both the backspace and the enter live on
+        // the bottom row now, at the two cells either side of the space bar's ends.
         //
-        // The caps key has come up to that end instead, on Jacky's call: caps reaches past M, but a
-        // mis-tap there shifts a letter and nothing else. The eighth cell is what keeps the row
-        // centred on the ten-cell grid and exactly half a cell out of step with the row above.
+        // The z-row's own eighth cell has been the comma, then the caps key, and is the period now,
+        // on his word: all three are harmless there. The eighth cell also keeps the row centred on
+        // the ten-cell grid and exactly half a cell out of step with the row above.
         val zRow = rowKeys(keys, 2)
         assertEquals(
-            listOf("z", "x", "c", "v", "b", "n", "m", "⇧"),
+            listOf("z", "x", "c", "v", "b", "n", "m", "."),
             zRow.map { it.key.label },
         )
-        assertEquals(KeyType.SHIFT, zRow.last().key.type)
+        assertEquals(KeyType.CHARACTER, zRow.last().key.type)
         assertEquals(
             "no destructive key sits at the end of a letter row",
             emptyList<KeyType>(),
             zRow.map { it.key.type }.filter { it == KeyType.DELETE || it == KeyType.ENTER },
         )
 
-        // And on the bottom row backspace is at the space bar's left, out of every letter's reach.
+        // The caps is out of every letter's reach too, down on the bottom row, and the backspace
+        // sits past the space bar and the enter, at the row's right end.
         val bottom = rowKeys(keys, 3)
         assertEquals(",", bottom[0].key.label)
-        assertEquals(KeyType.DELETE, bottom[1].key.type)
+        assertEquals(KeyType.SHIFT, bottom[1].key.type)
         assertEquals(KeyType.SPACE, bottom[2].key.type)
+        assertEquals(KeyType.DELETE, bottom[4].key.type)
     }
 
     @Test
-    fun `the number key has left the board for the strip, and caps has left for the z-row`() {
+    fun `the number key has left the board for the strip`() {
         val keys = placed()
 
-        // He asked for the caps key beside the M and for the bottom row to come in a hex at each
-        // end. Moving the number key to the strip is what paid for both: the row is five keys and
-        // seven cells, and the ?123 page is one tap above the board.
+        // The ?123 page is one tap above the board now, and the cell it gave up is what lets the
+        // bottom row come in a hex at each end while the space bar keeps its three.
         assertEquals(
             "the hex letters board carries no symbols key",
             emptyList<KeyType>(),
             rowKeys(keys, 3).map { it.key.type }.filter { it == KeyType.SYMBOLS },
         )
-        assertEquals(KeyType.SHIFT, rowKeys(keys, 2).last().key.type)
+        assertEquals(KeyType.SHIFT, rowKeys(keys, 3)[1].key.type)
     }
 
     @Test

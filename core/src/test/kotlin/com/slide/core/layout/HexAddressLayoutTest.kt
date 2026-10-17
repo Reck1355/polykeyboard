@@ -126,12 +126,12 @@ class HexAddressLayoutTest {
     @Test
     fun `the letters board keeps its comma and its period`() {
         // The address rows give the comma's cell up to the delimiter and the period's to `.com`. The
-        // letters board must not have given either up with them: they are the row's two ends, and
-        // the enter and the backspace sit between them and the space bar.
+        // letters board must not have given either up with them. The comma still opens the bottom
+        // row; the period has moved up to the z-row's end, which is where he put it.
         val bottom = Layouts.HexQwertyEn.rows.last().keys.map { it.outputText }
-        assertEquals("five keys, the comma first and the period last", 5, Layouts.HexQwertyEn.rows.last().keys.size)
+        assertEquals("five keys, the comma first", 5, Layouts.HexQwertyEn.rows.last().keys.size)
         assertEquals(",", bottom.first())
-        assertEquals(".", bottom.last())
+        assertEquals(".", Layouts.HexQwertyEn.rows[2].keys.last().outputText)
     }
 
     @Test
