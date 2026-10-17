@@ -40,8 +40,23 @@ def lowest_point(svg_text):
     return max(ys)
 
 
+def preview_svg(name):
+    """The freshest SVG for this shot: the test's own output, else the copy beside this script.
+
+    Rastering whatever sits in `tools/` reported success on a picture drawn from a stale file - the
+    copy was hours old while the test had written a fresh one into `ime/build/preview/`, and the PNG
+    simply showed the old strip. Take the newer mtime of the two and say which one was used.
+    """
+    candidates = [HERE / f"{name}.svg", HERE.parent / "ime" / "build" / "preview" / f"{name}.svg"]
+    present = [p for p in candidates if p.exists()]
+    assert present, f"{name}: no SVG - run the preview test first"
+    svg_path = max(present, key=lambda p: p.stat().st_mtime)
+    print(f"   {svg_path}  ({svg_path.stat().st_mtime_ns // 10**9})")
+    return svg_path
+
+
 def raster(name):
-    svg_path = HERE / f"{name}.svg"
+    svg_path = preview_svg(name)
     svg = svg_path.read_text(encoding="utf-8")
     w, h = svg_box(svg_path)
     low = lowest_point(svg)

@@ -650,6 +650,18 @@ private fun SetupScreen(repository: SettingsRepository) {
 
                     // Resolved through the stored setting so this card can never disagree with
                     // the model the keyboard actually loads; unknown values fall back to Default.
+                    SettingSwitch(
+                        "Microphone button",
+                        settings.micButtonEnabled,
+                    ) { value -> scope.launch { repository.update { it.copy(micButtonEnabled = value) } } }
+                    Text(
+                        "Shows the microphone at the left end of the bar above the keys. Switched " +
+                            "off, the suggestions keep that width and nothing starts a recording " +
+                            "from the keyboard; the model below stays set up either way.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+
                     val model = WhisperModel.fromId(settings.voiceModelId)
                     Text(model.label, style = MaterialTheme.typography.bodyLarge)
                     Text(

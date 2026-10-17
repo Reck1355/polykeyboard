@@ -162,6 +162,12 @@ data class KeyboardSettings(
      * unrecognised value falls back to the default.
      */
     val voiceModelId: String = "",
+    /**
+     * Whether the strip offers the microphone. Off hides that control and leaves its width to
+     * the suggestions; voice typing itself stays set up and unstartable from the strip, which
+     * is the point of the switch rather than a side effect of it.
+     */
+    val micButtonEnabled: Boolean = true,
     val autoCapitalize: Boolean = true,
     val doubleSpacePeriod: Boolean = true,
     /**
@@ -320,7 +326,8 @@ internal fun isBackupEligibleSetting(name: String, value: Any): Boolean = when (
     "auto_capitalize",
     "double_space_period",
     "update_checks_enabled",
-    "include_alpha_updates" -> value is Boolean
+    "include_alpha_updates",
+    "mic_button" -> value is Boolean
     else -> false
 }
 
@@ -640,6 +647,7 @@ private object Keys {
     val LEARNED_DATA_CLEAR_EPOCH = longPreferencesKey("learned_data_clear_epoch")
     val BLOCK_OFFENSIVE = booleanPreferencesKey("block_offensive_words")
     val VOICE_MODEL = stringPreferencesKey("voice_model")
+    val MIC_BUTTON = booleanPreferencesKey("mic_button")
     val AUTO_CAPITALIZE = booleanPreferencesKey("auto_capitalize")
     val DOUBLE_SPACE_PERIOD = booleanPreferencesKey("double_space_period")
     val EMOJI_SKIN_TONE = intPreferencesKey("emoji_skin_tone")
@@ -692,6 +700,7 @@ internal fun MutablePreferences.writeKeyboardSettings(updated: KeyboardSettings)
     this[Keys.LEARNED_DATA_CLEAR_EPOCH] = updated.learnedDataClearEpoch
     this[Keys.BLOCK_OFFENSIVE] = updated.blockOffensiveWords
     this[Keys.VOICE_MODEL] = updated.voiceModelId
+    this[Keys.MIC_BUTTON] = updated.micButtonEnabled
     this[Keys.AUTO_CAPITALIZE] = updated.autoCapitalize
     this[Keys.DOUBLE_SPACE_PERIOD] = updated.doubleSpacePeriod
     this[Keys.EMOJI_SKIN_TONE] = updated.emojiSkinTone
@@ -730,6 +739,7 @@ internal fun Preferences.toKeyboardSettings(): KeyboardSettings {
             this[Keys.LEARNED_DATA_CLEAR_EPOCH] ?: defaults.learnedDataClearEpoch,
         blockOffensiveWords = this[Keys.BLOCK_OFFENSIVE] ?: defaults.blockOffensiveWords,
         voiceModelId = this[Keys.VOICE_MODEL] ?: defaults.voiceModelId,
+        micButtonEnabled = this[Keys.MIC_BUTTON] ?: defaults.micButtonEnabled,
         autoCapitalize = this[Keys.AUTO_CAPITALIZE] ?: defaults.autoCapitalize,
         doubleSpacePeriod = this[Keys.DOUBLE_SPACE_PERIOD] ?: defaults.doubleSpacePeriod,
         emojiSkinTone = this[Keys.EMOJI_SKIN_TONE] ?: defaults.emojiSkinTone,

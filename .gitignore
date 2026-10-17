@@ -39,3 +39,12 @@ third_party/executorch/*.aar
 # from this repo; fetch it and rebuild with tools or the snippet in docs/typing-quality-benchmarks.md.
 engine/src/androidTest/assets/swipe_benchmark_subset.jsonl
 engine/src/androidTest/assets/swipe_session.jsonl
+
+# Preview rasters and their intermediates: derived from the board geometry on every run, and the
+# repo carries the geometry, not the picture. A `git add -A tools` once committed twelve of them.
+tools/*.svg
+tools/*.html
+tools/*-raw.png
+tools/send-*.png
+tools/look-*.png
+tools/*-final.png

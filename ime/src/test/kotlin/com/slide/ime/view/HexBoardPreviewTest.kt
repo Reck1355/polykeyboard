@@ -175,11 +175,11 @@ class HexBoardPreviewTest {
         out.append("""<rect width="${shot.width}" height="$height" fill="${hex(palette.background)}"/>""")
 
         // The strip, drawn from the same numbers the view lays it out with. Voice is on in this
-        // build, so the microphone is one of the buttons and the three squares sit beside the words
-        // rather than the two that were reserved here when it was off.
+        // build, so the microphone holds the square at the left end and the three mode buttons sit
+        // at the right, beside the words.
         val voiceEnabled = true
-        val trailing = SuggestionStripLayout.trailingSquares(voiceEnabled)
-        val suggestionLeft = SuggestionStripLayout.suggestionLeft(stripHeight)
+        val trailing = SuggestionStripLayout.trailingSquares()
+        val suggestionLeft = SuggestionStripLayout.suggestionLeft(stripHeight, voiceEnabled)
         val suggestionWidth = SuggestionStripLayout.suggestionWidth(
             shot.width,
             stripHeight,
@@ -206,9 +206,10 @@ class HexBoardPreviewTest {
                 ),
             )
         }
-        out.append(stripButton(shot.width, voiceEnabled, 3, ::globeGlyph))
-        out.append(stripButton(shot.width, voiceEnabled, 2, ::emojiGlyph))
-        if (voiceEnabled) out.append(stripButton(shot.width, voiceEnabled, 1, ::micGlyph))
+        out.append(stripButton(shot.width, 3, ::symbolsGlyph))
+        out.append(stripButton(shot.width, 2, ::globeGlyph))
+        out.append(stripButton(shot.width, 1, ::emojiGlyph))
+        if (voiceEnabled) out.append(micButton(suggestionLeft / 2f))
 
         // The board: one polygon per cell of every key, with the seams of a wide key painted out.
         for (placed in placement.keys) {
@@ -267,21 +268,35 @@ class HexBoardPreviewTest {
         return out.toString()
     }
 
+    /** The microphone's square, at the left end of the strip, exactly where the view draws it. */
+    private fun micButton(centerX: Float): String {
+        val out = StringBuilder()
+        out.append(
+            """<circle cx="$centerX" cy="${stripHeight / 2f}" r="${stripHeight * 0.36f}" """ +
+                """fill="${hex(palette.specialKey)}"/>""",
+        )
+        micGlyph(out, centerX, stripHeight / 2f)
+        return out.toString()
+    }
+
+    /**
+     * A button's square, from the right edge, with its glyph centred in it. The glyph is handed the
+     * square's own centre: drawn from a fixed offset instead, the buttons landed wherever the strip
+     * happened to be wide, which is how the picture came to disagree with the keyboard.
+     */
     private fun stripButton(
         width: Float,
-        voiceEnabled: Boolean,
         fromEdge: Int,
-        glyph: (StringBuilder) -> Unit,
+        glyph: (StringBuilder, Float, Float) -> Unit,
     ): String {
-        val mic = if (voiceEnabled) 1 else 0
-        val left = SuggestionStripLayout.squareLeft(width, stripHeight, fromEdge + mic)
-        val right = SuggestionStripLayout.squareRight(width, stripHeight, fromEdge + mic)
+        val left = SuggestionStripLayout.squareLeft(width, stripHeight, fromEdge)
+        val right = SuggestionStripLayout.squareRight(width, stripHeight, fromEdge)
         val out = StringBuilder()
         out.append(
             """<rect x="$left" y="0" width="${right - left}" height="$stripHeight" """ +
                 """fill="${hex(palette.background)}"/>""",
         )
-        glyph(out)
+        glyph(out, (left + right) / 2f, stripHeight / 2f)
         return out.toString()
     }
 
@@ -321,10 +336,8 @@ class HexBoardPreviewTest {
             """stroke-linejoin="round"/>"""
     }
 
-    private fun micGlyph(out: StringBuilder) {
+    private fun micGlyph(out: StringBuilder, cx: Float, cy: Float) {
         // A rounded capsule and its stand, in the view's stroke family rather than the real glyph.
-        val cx = stripHeight * 3.5f
-        val cy = stripHeight / 2f
         val r = stripHeight * 0.16f
         out.append(
             """<rect x="${cx - r * 0.6f}" y="${cy - r}" width="${r * 1.2f}" height="${r * 1.8f}" """ +
@@ -336,9 +349,7 @@ class HexBoardPreviewTest {
         )
     }
 
-    private fun emojiGlyph(out: StringBuilder) {
-        val cx = stripHeight * 2.5f
-        val cy = stripHeight / 2f
+    private fun emojiGlyph(out: StringBuilder, cx: Float, cy: Float) {
         val r = stripHeight * 0.22f
         out.append(
             """<circle cx="$cx" cy="$cy" r="$r" fill="none" stroke="${hex(palette.label)}" """ +
@@ -356,9 +367,7 @@ class HexBoardPreviewTest {
         )
     }
 
-    private fun globeGlyph(out: StringBuilder) {
-        val cx = stripHeight * 1.5f
-        val cy = stripHeight / 2f
+    private fun globeGlyph(out: StringBuilder, cx: Float, cy: Float) {
         val r = stripHeight * 0.22f
         out.append(
             """<circle cx="$cx" cy="$cy" r="$r" fill="none" stroke="${hex(palette.label)}" """ +
@@ -372,6 +381,11 @@ class HexBoardPreviewTest {
             """<path d="M $cx ${cy - r} a ${r * 0.55f} $r 0 0 1 0 ${r * 2f}" """ +
                 """fill="none" stroke="${hex(palette.label)}" stroke-width="3"/>""",
         )
+    }
+
+    /** The letters/symbols square, whose label is text in the view as well. */
+    private fun symbolsGlyph(out: StringBuilder, cx: Float, cy: Float) {
+        out.append(text("?123", cx, cy, stripHeight * 0.30f, hex(palette.label)))
     }
 
     private fun text(value: String, centerX: Float, centerY: Float, size: Float, colour: String) =

@@ -243,8 +243,14 @@ class SlideInputMethodService :
         packageManager.hasSystemFeature(PackageManager.FEATURE_MICROPHONE)
     }
 
+    /**
+     * Whether the strip carries the microphone for this editor: the hardware and the input policy
+     * allow it, and the user has left the microphone button switched on in the app's settings. One
+     * gate read by every caller, so hiding the button cannot leave a path that still starts a
+     * recording, and every suggestion takes the width the button held.
+     */
     private fun voiceAvailableForEditor(): Boolean =
-        deviceHasMicrophone && editorInputPolicy.allowsVoice
+        deviceHasMicrophone && editorInputPolicy.allowsVoice && settings.micButtonEnabled
 
     /** Whether the active editor set IME_FLAG_NO_PERSONALIZED_LEARNING. */
     private var editorRequestsNoLearning = false
@@ -2183,11 +2189,6 @@ class SlideInputMethodService :
             StripMode.Chinese -> commitPinyin(currentInputConnection, word)
             StripMode.GesturePreview, StripMode.Empty -> Unit
         }
-    }
-
-    override fun onSettingsRequested() {
-        if (queueBehindGestureInput(::processSettingsRequested)) return
-        processSettingsRequested()
     }
 
     private fun processSettingsRequested() {

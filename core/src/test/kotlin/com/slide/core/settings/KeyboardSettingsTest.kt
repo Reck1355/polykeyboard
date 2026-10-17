@@ -442,6 +442,7 @@ class KeyboardSettingsTest {
             keyboardSizeStep = KeyboardSize.MAX_STEP,
             updateChecksEnabled = true,
             includeAlphaUpdates = true,
+            micButtonEnabled = false,
         )
 
         // Every constructor field must differ from its default here, or the round trip below

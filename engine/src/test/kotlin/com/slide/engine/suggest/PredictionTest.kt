@@ -28,7 +28,10 @@ class PredictionTest {
             val predicted = suggester.predict(word)
             println("'$word ...' -> $predicted")
             assertTrue("nothing predicted after '$word'", predicted.isNotEmpty())
-            assertTrue("too many predicted after '$word'", predicted.size <= 3)
+            assertTrue(
+                "more predicted after '$word' than the list holds: $predicted",
+                predicted.size <= SuggesterConfig().maxResults,
+            )
             assertEquals("repeated itself after '$word'", predicted.distinct().size, predicted.size)
         }
     }

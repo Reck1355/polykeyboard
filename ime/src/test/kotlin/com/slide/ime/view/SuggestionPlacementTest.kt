@@ -34,47 +34,60 @@ class SuggestionPlacementTest {
         val width = 360f
         val height = 48f
 
+        // With voice on the window runs from the microphone's square to the mode buttons: 48..168
+        // wide, so three 56-pixel slots. A point in the microphone's square is a button, and so is
+        // a point in the emoji square at the right edge; neither may resolve to a candidate.
         assertNull(SuggestionStripLayout.slotAt(24f, width, height, voiceEnabled = true, slotCount = 3))
         assertEquals(0, SuggestionStripLayout.slotAt(48f, width, height, voiceEnabled = true, slotCount = 3))
-        assertEquals(1, SuggestionStripLayout.slotAt(150f, width, height, voiceEnabled = true, slotCount = 3))
-        assertEquals(2, SuggestionStripLayout.slotAt(311f, width, height, voiceEnabled = true, slotCount = 3))
-        assertNull(SuggestionStripLayout.slotAt(312f, width, height, voiceEnabled = true, slotCount = 3))
+        assertEquals(1, SuggestionStripLayout.slotAt(110f, width, height, voiceEnabled = true, slotCount = 3))
+        assertEquals(2, SuggestionStripLayout.slotAt(215f, width, height, voiceEnabled = true, slotCount = 3))
+        assertNull(SuggestionStripLayout.slotAt(216f, width, height, voiceEnabled = true, slotCount = 3))
     }
 
     @Test
     fun `disabling voice gives its control width back to suggestions`() {
-        assertEquals(264f, SuggestionStripLayout.suggestionWidth(360f, 48f, voiceEnabled = true))
-        assertEquals(312f, SuggestionStripLayout.suggestionWidth(360f, 48f, voiceEnabled = false))
-        // The strip the keyboard actually draws: the settings square at the left and four to the
-        // right of the candidates - emoji, language, symbols and the microphone. Five squares, and
-        // the arithmetic has to agree with the drawing or a column of the strip is invisible.
-        val trailing = SuggestionStripLayout.trailingSquares(voiceEnabled = true)
-        assertEquals("emoji, language, symbols, microphone", 4, trailing)
+        // One square at the left, the microphone's, and three at the right: emoji, language and
+        // symbols. The settings square was the fifth, and it lives in the app's settings screens
+        // now, so its width belongs to the words.
+        assertEquals(168f, SuggestionStripLayout.suggestionWidth(360f, 48f, voiceEnabled = true))
+        assertEquals(216f, SuggestionStripLayout.suggestionWidth(360f, 48f, voiceEnabled = false))
+        val trailing = SuggestionStripLayout.trailingSquares()
+        assertEquals("emoji, language, symbols", 3, trailing)
         assertEquals(
-            360f - 48f * 5,
+            360f - 48f * 4,
             SuggestionStripLayout.suggestionWidth(360f, 48f, voiceEnabled = true, trailingSquares = trailing),
         )
+        // Where the candidate window ends is the same number every hit test reads: past it are
+        // buttons, not words, so a tap there must not resolve to a candidate.
         assertEquals(
             2,
-            SuggestionStripLayout.slotAt(340f, 360f, 48f, voiceEnabled = false, slotCount = 3),
+            SuggestionStripLayout.slotAt(210f, 360f, 48f, voiceEnabled = false, slotCount = 3),
+        )
+        assertNull(
+            SuggestionStripLayout.slotAt(217f, 360f, 48f, voiceEnabled = false, slotCount = 3),
+        )
+        assertEquals(
+            0f,
+            SuggestionStripLayout.suggestionLeft(48f, voiceEnabled = false),
+        )
+        assertEquals(
+            48f,
+            SuggestionStripLayout.suggestionLeft(48f, voiceEnabled = true),
         )
     }
 
     @Test
     fun `the emoji and language buttons take their width from the candidates`() {
-        // The strip carries the two buttons the boards gave up. They are on it in every state, so
-        // the candidate window is what gives way, and the window's right edge is exactly where the
-        // language button's square begins: a point on a button is never read as a candidate.
-        // Two trailing squares plus the settings square at the left: three of the strip's eight
-        // forty-eight-pixel squares, so the candidates keep five. 168f here was four squares - the
-        // count that put an ellipsis in every candidate on his phone, because the microphone was
-        // being reserved once in this call and once more inside the arithmetic.
+        // The three mode buttons are on the strip in every state, so the candidate window is what
+        // gives way, and the window's right edge is exactly where the first button's square begins:
+        // a point on a button is never read as a candidate. The microphone's square counts only
+        // while voice typing is on - the switch that hides it hands that square back to the words.
         assertEquals(
             216f,
             SuggestionStripLayout.suggestionWidth(360f, 48f, voiceEnabled = true, trailingSquares = 2),
         )
         assertEquals(
-            216f,
+            264f,
             SuggestionStripLayout.suggestionWidth(360f, 48f, voiceEnabled = false, trailingSquares = 2),
         )
         // 216f is the width the candidates keep; the window's right edge is 48 + 216 = 264f, which

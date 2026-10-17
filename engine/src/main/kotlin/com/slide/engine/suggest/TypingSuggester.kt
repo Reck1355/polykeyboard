@@ -50,7 +50,12 @@ data class TypingSuggestions(val words: List<WordSuggestion>, val autocorrection
  */
 data class SuggesterConfig(
     /** Candidates returned. Matches the suggestion strip's three cells. */
-    val maxResults: Int = 3,
+    /**
+     * How many candidates the result holds. The strip draws three at a time and scrolls to the
+     * rest, so this is a list the user can reach rather than a limit they hit: three exactly
+     * filled the strip and left the scroll nothing to reveal.
+     */
+    val maxResults: Int = 8,
     /** Weight on word frequency, and so the full range of the language score. */
     val languageWeight: Float = 1.0f,
 
