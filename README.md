@@ -49,6 +49,16 @@ size and SHA-256, package, newer SemVer and 64-bit Android version code, and sig
 when Android exposes it, then opens Android's normal installer for confirmation. Android itself
 always enforces the installed app's signing identity.
 
+## Known CI failure, stated rather than hidden
+
+The continuous integration `verify` job fails, and has on every push, on the pinyin tests
+(`PinyinDataTest`, `PinyinEngineTest`, `PinyinGlideTest`, `PinyinKeyboardOrderTest`) and on the
+Mandarin cases of `SuggestionReachTest`. Those tests read generated pinyin dictionary assets
+that are not committed to this repository, so they pass on a machine that has built them and
+fail anywhere else. Mandarin is engine-complete but not yet wired to the keyboard, and shipping
+its dictionaries is part of finishing that work. The rest of the suite, all five module lints
+including `:app:lintRelease`, and the release build pass.
+
 ## Status
 
 Typing, themes, and gesture decoding were verified on a Galaxy S24 Ultra (Android 16). The native
