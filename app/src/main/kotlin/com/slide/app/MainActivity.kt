@@ -535,6 +535,14 @@ private fun SetupScreen(repository: SettingsRepository) {
                         valueLabel = "${(keyHeight * 100).roundToInt()}%",
                         valueRange = 0.7f..1.4f,
                         steps = 6,
+                        // Above 100% there is nothing left for it to do on the honeycomb: the keys
+                        // already span the screen's width, so a taller frame was only empty space
+                        // above the board. It stays enabled because it is the control that makes the
+                        // keys smaller, and the reason is on the screen rather than in a guess. The
+                        // size ladder is what makes them larger.
+                        description = "Above 100% the honeycomb cannot get bigger: the keys already " +
+                            "span the screen's width. Use Keyboard size to make them larger, or this " +
+                            "one to make them smaller.",
                         onValueChange = { keyHeight = it },
                         onValueChangeFinished = {
                             scope.launch {
@@ -959,6 +967,12 @@ private fun SettingSlider(
     valueLabel: String,
     valueRange: ClosedFloatingPointRange<Float>,
     steps: Int,
+    /**
+     * Why the control cannot do more, when it cannot. A control that has reached its limit stays
+     * enabled and says so here rather than being greyed out, which removes it from assistive
+     * technology and turns a stored setting into a dead one.
+     */
+    description: String? = null,
     enabled: Boolean = true,
     onValueChange: (Float) -> Unit,
     onValueChangeFinished: () -> Unit,
@@ -998,6 +1012,14 @@ private fun SettingSlider(
             steps = steps,
             enabled = enabled,
         )
+        description?.let {
+            Text(
+                it,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+
     }
 }
 

@@ -435,6 +435,22 @@ object HexBoard {
     fun scaledBoardHeight(cappedHeight: Float, scale: Float): Float = cappedHeight * scale
 
     /**
+     * The height a control may ask the board's frame to be.
+     *
+     * Width binds in portrait, and portrait is the single board: ten columns already spend the whole
+     * width, so no height control can make its hexagons *larger*. What it can change is the ratio -
+     * taller or flatter - which is the size ladder's business. Asking for a frame taller than the
+     * block the width allows therefore bought nothing but empty space above the board, and that is
+     * exactly the report: "the height doesn't actually make the keys taller past 100 just moves
+     * keyboard up", with the board-placement control already moving the board.
+     *
+     * So a frame is never taller than the block that will be drawn in it, and the height control's
+     * reach is the shrink side, where a shorter frame is a genuinely smaller board.
+     */
+    fun frameHeight(cappedHeight: Float, scale: Float): Float =
+        min(scaledBoardHeight(cappedHeight, scale), cappedHeight)
+
+    /**
      * The largest uniform cell width that fits the board in a viewport of [viewportWidth] x
      * [availableHeight], at [sizing].
      *

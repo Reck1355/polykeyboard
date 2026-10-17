@@ -19,6 +19,8 @@ import androidx.customview.widget.ExploreByTouchHelper
 import com.slide.core.theme.KeyboardTheme
 import com.slide.core.theme.Themes
 import kotlin.math.cos
+import kotlin.math.floor
+import kotlin.math.roundToInt
 import kotlin.math.sin
 
 /**
@@ -119,10 +121,46 @@ class SuggestionStripView(context: Context) : View(context) {
      * where the window opens; with no more candidates than fit, it stays at nought and the placement
      * helper decides which slot the best word sits in.
      */
-    private var scrollOffset = 0
+    private var scrollPx = 0f
     private var dragStartX = 0f
-    private var lastDragX = 0f
+    private var dragStartPx = 0f
     private var dragging = false
+
+    /**
+     * Which candidate the leftmost slot shows, read off [scrollPx].
+     *
+     * The drag travels in pixels so that it follows the thumb. It used to step a whole cell at a
+     * time, which on a 1080 px screen meant a swipe shorter than 184 px moved nothing at all: the
+     * gesture was there and simply did not answer, so the strip read as unscrollable. The slot is
+     * now derived, and the window rests on one after the finger lifts.
+     */
+    private val scrollOffset: Int
+        get() = scrollSlot(scrollPx)
+
+    private fun cellWidth(): Float = suggestionWidth() / MAX_VISIBLE
+
+    private fun maxScrollPx(): Float = SuggestionStripLayout.maxScrollPx(
+        width = width.toFloat(),
+        height = height.toFloat(),
+        voiceEnabled = voiceEnabled,
+        slotCount = MAX_VISIBLE,
+        count = words.size,
+        trailingSquares = trailingSquares(),
+    )
+
+    private fun scrollSlot(px: Float): Int {
+        val last = (words.size - MAX_VISIBLE).coerceAtLeast(0)
+        val cell = cellWidth().coerceAtLeast(1f)
+        return (px / cell).roundToInt().coerceIn(0, last)
+    }
+
+    /** Rounds a finished drag onto a slot, so the strip never rests between two candidates. */
+    private fun settleScroll() {
+        if (!dragging) return
+        dragging = false
+        scrollPx = scrollOffset * cellWidth()
+        invalidate()
+    }
 
     /** See [ellipsized]. */
     private var ellipsizedWidth = 0f
@@ -220,7 +258,7 @@ class SuggestionStripView(context: Context) : View(context) {
             }
             if (virtualViewId == A11Y_MIC) {
                 node.contentDescription = "Voice typing"
-                node.setBoundsInParent(Rect(0, 0, micWidth().toInt(), height))
+                node.setBoundsInParent(Rect(micLeft().toInt(), 0, (micLeft() + squareWidth()).toInt(), height))
                 return
             }
             if (virtualViewId == A11Y_EMOJI) {
@@ -374,7 +412,8 @@ class SuggestionStripView(context: Context) : View(context) {
         requested.forEach(words::add)
         // A new list is a new question, so the window opens at the start of it. Keeping an old scroll
         // would drop the best reading off the left edge exactly when the user is watching it change.
-        scrollOffset = 0
+        scrollPx = 0f
+        dragging = false
         pressedIndex = -1
         clipboardPressed = false
         editPressed = false
@@ -411,16 +450,24 @@ class SuggestionStripView(context: Context) : View(context) {
         drawLanguageButton(canvas)
         drawSymbolsButton(canvas)
         if (words.isEmpty()) {
-            drawToolbarButton(canvas, squareWidth() * 1.5f, pressed = clipboardPressed) { x, y ->
+            drawToolbarButton(
+                canvas,
+                squareWidth() * (leftGroupStart() + 0.5f),
+                pressed = clipboardPressed,
+            ) { x, y ->
                 drawClipboardGlyph(canvas, x, y)
             }
-            drawToolbarButton(canvas, squareWidth() * 2.5f, pressed = editPressed) { x, y ->
+            drawToolbarButton(
+                canvas,
+                squareWidth() * (leftGroupStart() + 1.5f),
+                pressed = editPressed,
+            ) { x, y ->
                 drawEditGlyph(canvas, x, y)
             }
             if (emptyMessage.isNotEmpty()) {
                 // The hint shares the row with the toolbar icons, so it centres over what is
                 // left of the strip and disappears rather than colliding on a narrow screen.
-                val messageLeft = squareWidth() * 3
+                val messageLeft = squareWidth() * (leftGroupStart() + 2f)
                 val messageRight = squareLeft(trailingSquares())
                 val messageWidth = messageRight - messageLeft
                 if (messageWidth >= dp(72f)) {
@@ -448,7 +495,7 @@ class SuggestionStripView(context: Context) : View(context) {
         if (words.size > MAX_VISIBLE) {
             val trackLeft = suggestionLeft()
             val trackWidth = cellWidth * MAX_VISIBLE
-            val shown = (scrollOffset + MAX_VISIBLE).toFloat() / words.size
+            val shown = (scrollPx + trackWidth) / (cellWidth * words.size)
             markPaint.color = keyboardTheme.suggestionHighlightText
             markPaint.strokeWidth = dp(2f)
             val lineY = height - dp(1.5f)
@@ -460,9 +507,17 @@ class SuggestionStripView(context: Context) : View(context) {
 
         // Keep the best candidate in the centre. That stable target is easier to scan and matches
         // the placement people have learned from mature mobile keyboards.
-        for (slot in 0 until MAX_VISIBLE) {
+        // The window is a slot onto the list, so a drag in progress shows two halves of two words at
+        // once: everything the candidates draw is clipped to it rather than allowed to run under a
+        // button. One slot past each edge is drawn too, so a word entering from the side arrives as
+        // it moves instead of appearing only once it has landed.
+        val windowLeft = suggestionLeft()
+        val windowWidth = suggestionWidth()
+        canvas.save()
+        canvas.clipRect(windowLeft, 0f, windowLeft + windowWidth, height.toFloat())
+        for (slot in -1 until MAX_VISIBLE + 1) {
             val index = candidateAtSlot(slot) ?: continue
-            val left = suggestionLeft() + slot * cellWidth
+            val left = windowLeft + slot * cellWidth - scrollPx
 
             if (index == pressedIndex) {
                 pressedPaint.color = keyboardTheme.keyPressedOverlay
@@ -511,9 +566,10 @@ class SuggestionStripView(context: Context) : View(context) {
         val inset = dp(10f)
         dividerPaint.color = keyboardTheme.divider
         for (slot in 1 until MAX_VISIBLE) {
-            val x = suggestionLeft() + slot * cellWidth
+            val x = windowLeft + slot * cellWidth - scrollPx
             canvas.drawLine(x, inset, x, height - inset, dividerPaint)
         }
+        canvas.restore()
     }
 
     /** Shared chrome for the empty-strip toolbar buttons: circle, pressed overlay, then glyph. */
@@ -625,7 +681,12 @@ class SuggestionStripView(context: Context) : View(context) {
      */
     private fun drawMicButton(canvas: Canvas) {
         if (!voiceEnabled) return
-        val centerX = micWidth() / 2f
+        val centerX = SuggestionStripLayout.micLeft(
+            width.toFloat(),
+            height.toFloat(),
+            voiceEnabled,
+            trailingSquares(),
+        ) + height / 2f
         val centerY = height / 2f
 
         // A stable circular control separates voice input from suggestions without the hard
@@ -641,8 +702,13 @@ class SuggestionStripView(context: Context) : View(context) {
         MicGlyph.draw(canvas, textPaint, centerX, centerY, height * 0.25f)
     }
 
-    /** Width reserved for the microphone button at the left end. */
-    private fun micWidth(): Float = height.toFloat()
+    /** Left edge of the microphone's square: the first one inside the trailing buttons. */
+    private fun micLeft(): Float = SuggestionStripLayout.micLeft(
+        width.toFloat(),
+        height.toFloat(),
+        voiceEnabled,
+        trailingSquares(),
+    )
 
     /**
      * Squares reserved after the candidates: the emoji, language and symbols buttons. The
@@ -664,7 +730,7 @@ class SuggestionStripView(context: Context) : View(context) {
     private fun squareWidth(): Float = height.toFloat()
 
     private fun suggestionLeft(): Float =
-        SuggestionStripLayout.suggestionLeft(height.toFloat(), voiceEnabled)
+        SuggestionStripLayout.suggestionLeft(height.toFloat())
 
     private fun suggestionWidth(): Float =
         SuggestionStripLayout.suggestionWidth(
@@ -682,7 +748,7 @@ class SuggestionStripView(context: Context) : View(context) {
             MotionEvent.ACTION_DOWN -> {
                 activePointerId = event.getPointerId(event.actionIndex)
                 dragStartX = event.x
-                lastDragX = event.x
+                dragStartPx = scrollPx
                 dragging = false
                 clipboardPressed = isOverClipboard(event.x)
                 editPressed = !clipboardPressed && isOverEdit(event.x)
@@ -702,7 +768,17 @@ class SuggestionStripView(context: Context) : View(context) {
                 longPressFired = false
                 if (pressedIndex >= 0) scheduleLongPress(pressedIndex)
                 invalidate()
-                return overButton || pressedIndex >= 0
+                // A press that starts on the empty part of the window is a drag waiting to happen,
+                // and it has to be claimed here or no move event ever arrives. It used to be claimed
+                // only over a word, so pressing the space beside one scrolled nothing at all.
+                val dragWindow = !overButton && SuggestionStripLayout.withinWindow(
+                    x = event.x,
+                    width = width.toFloat(),
+                    height = height.toFloat(),
+                    voiceEnabled = voiceEnabled,
+                    trailingSquares = trailingSquares(),
+                )
+                return overButton || pressedIndex >= 0 || dragWindow
             }
 
             MotionEvent.ACTION_POINTER_DOWN -> {
@@ -733,13 +809,16 @@ class SuggestionStripView(context: Context) : View(context) {
                         releasePress()
                     }
                     if (dragging) {
-                        val cellWidth = suggestionWidth() / MAX_VISIBLE
-                        val moved = ((x - lastDragX) / cellWidth).toInt()
-                        if (moved != 0) {
-                            lastDragX += moved * cellWidth
-                            scrollOffset = (scrollOffset - moved).coerceIn(0, words.size - MAX_VISIBLE)
-                            invalidate()
-                        }
+                        // One pixel of thumb, one pixel of words. The strip used to move a whole cell
+                        // per step, so a flick shorter than a cell produced no movement at all and
+                        // the gesture read as dead.
+                        scrollPx = SuggestionStripLayout.draggedPx(
+                            startPx = dragStartPx,
+                            fingerDownX = dragStartX,
+                            fingerX = x,
+                            maxPx = maxScrollPx(),
+                        )
+                        invalidate()
                         return true
                     }
                 }
@@ -796,7 +875,7 @@ class SuggestionStripView(context: Context) : View(context) {
             }
 
             MotionEvent.ACTION_CANCEL -> {
-                dragging = false
+                settleScroll()
                 releasePress()
             }
         }
@@ -810,6 +889,7 @@ class SuggestionStripView(context: Context) : View(context) {
 
     /** Resolves the current press: fires whichever control the pressing finger still holds. */
     private fun finishTap() {
+        settleScroll()
         val index = pressedIndex
         val clipboard = clipboardPressed
         val edit = editPressed
@@ -881,7 +961,16 @@ class SuggestionStripView(context: Context) : View(context) {
         cancelPendingLongPress()
     }
 
-    private fun isOverMic(x: Float): Boolean = voiceEnabled && x < micWidth()
+    private fun isOverMic(x: Float): Boolean {
+        if (!voiceEnabled) return false
+        val left = SuggestionStripLayout.micLeft(
+            width.toFloat(),
+            height.toFloat(),
+            voiceEnabled,
+            trailingSquares(),
+        )
+        return x >= left && x < left + squareWidth()
+    }
 
     /** The emoji square: one in from the edge, or at the edge itself when the microphone is away. */
     private fun isOverEmoji(x: Float): Boolean =
@@ -903,11 +992,26 @@ class SuggestionStripView(context: Context) : View(context) {
      */
     private val toolbarShown: Boolean get() = words.isEmpty()
 
+    /**
+     * Which square the strip's left-hand group starts on.
+     *
+     * The microphone holds square nought while it is on, so the clipboard and text-editing icons
+     * begin one square in. They began there whether or not it was on, which left square nought
+     * empty the moment the microphone was switched off - a hole at the end of the strip with the
+     * two icons sitting in from the edge. Whichever controls are on the left are packed against the
+     * edge now, and the candidates start after them.
+     */
+    private fun leftGroupStart(): Float = SuggestionStripLayout.leftGroupStart()
+
     private fun isOverClipboard(x: Float): Boolean =
-        toolbarShown && x >= squareWidth() && x < squareWidth() * 2
+        toolbarShown &&
+            x >= squareWidth() * leftGroupStart() &&
+            x < squareWidth() * (leftGroupStart() + 1f)
 
     private fun isOverEdit(x: Float): Boolean =
-        toolbarShown && x >= squareWidth() * 2 && x < squareWidth() * 3
+        toolbarShown &&
+            x >= squareWidth() * (leftGroupStart() + 1f) &&
+            x < squareWidth() * (leftGroupStart() + 2f)
 
     /** The candidate drawn in [slot], or null when the window runs off the end of the list. */
     private fun candidateAtSlot(slot: Int): Int? =
@@ -927,15 +1031,16 @@ class SuggestionStripView(context: Context) : View(context) {
 
     private fun indexAt(x: Float): Int {
         if (words.isEmpty()) return -1
-        val slot = SuggestionStripLayout.slotAt(
+        val index = SuggestionStripLayout.indexAt(
             x = x,
             width = width.toFloat(),
             height = height.toFloat(),
             voiceEnabled = voiceEnabled,
             slotCount = MAX_VISIBLE,
             trailingSquares = trailingSquares(),
+            scrollPx = scrollPx,
         ) ?: return -1
-        return candidateAtSlot(slot) ?: -1
+        return index.takeIf { it in words.indices } ?: -1
     }
 
     /** Trims a word that will not fit its cell, so it degrades to "extraordi…" rather than clipping. */
@@ -991,7 +1096,7 @@ class SuggestionStripView(context: Context) : View(context) {
         if (words.isNotEmpty()) add("Suggestions: ${words.joinToString(", ") { it.word }}")
         else if (emptyMessage.isNotEmpty()) add(emptyMessage)
         if (words.isEmpty()) add("Clipboard and edit text buttons at the left")
-        if (voiceEnabled) add("Voice typing button at the left")
+        if (voiceEnabled) add("Voice typing button, inside the buttons at the right")
     }.joinToString(". ")
 
     private companion object {
@@ -1044,8 +1149,7 @@ internal object SuggestionStripLayout {
      * settings button held this square until it moved into the app's own settings screens, and the
      * width it held went to the suggestions rather than to a gap.
      */
-    fun suggestionLeft(height: Float, voiceEnabled: Boolean): Float =
-        height.coerceAtLeast(0f) * (if (voiceEnabled) 1 else 0)
+    fun suggestionLeft(height: Float): Float = 0f
 
     /**
      * The trailing buttons' share of the strip: the emoji, language and symbols squares, and
@@ -1060,6 +1164,25 @@ internal object SuggestionStripLayout {
      * mistake the hit-target test exists to catch.
      */
     private const val ALWAYS_TRAILING = 3
+
+    /**
+     * Left edge of the microphone's square: the first one inside the trailing buttons.
+     *
+     * The candidates are anchored at the strip's left edge, so with the button on this is also the
+     * candidate window's own right edge. One function answers both the drawing and the hit test,
+     * rather than two offsets that can drift apart. With voice typing off there is no seat, and the
+     * whole width belongs to the words.
+     */
+    fun micLeft(
+        width: Float,
+        height: Float,
+        voiceEnabled: Boolean,
+        trailingSquares: Int = ALWAYS_TRAILING,
+    ): Float = if (!voiceEnabled) {
+        width
+    } else {
+        suggestionWidth(width, height, voiceEnabled, trailingSquares)
+    }
 
     /** Left edge of the square [fromEdge] steps in from the right edge, counting the edge as 1. */
     fun squareLeft(width: Float, height: Float, fromEdge: Int): Float =
@@ -1095,10 +1218,80 @@ internal object SuggestionStripLayout {
         trailingSquares: Int = ALWAYS_TRAILING,
     ): Int? {
         if (slotCount <= 0) return null
-        val left = suggestionLeft(height, voiceEnabled)
+        val left = suggestionLeft(height)
         val contentWidth = suggestionWidth(width, height, voiceEnabled, trailingSquares)
         if (contentWidth <= 0f || x < left || x >= left + contentWidth) return null
         return ((x - left) / (contentWidth / slotCount)).toInt().coerceIn(0, slotCount - 1)
+    }
+
+    /**
+     * Where the left-hand group begins: square nought with the microphone away, one square in with
+     * it on. The controls on that side are packed against this edge, so switching the microphone off
+     * closes the gap instead of leaving a hole with the icons set in from the edge.
+     */
+    fun leftGroupStart(): Float = 0f
+
+    /**
+     * How far the candidates have travelled after a drag.
+     *
+     * One pixel of finger, one pixel of words: [startPx] is where the list sat when the finger went
+     * down, and the movement is subtracted because dragging left brings later candidates in. The old
+     * arithmetic stepped whole cells here, so a flick shorter than one cell moved nothing and the
+     * strip read as unscrollable.
+     */
+    fun draggedPx(startPx: Float, fingerDownX: Float, fingerX: Float, maxPx: Float): Float =
+        (startPx - (fingerX - fingerDownX)).coerceIn(0f, maxPx.coerceAtLeast(0f))
+
+    /** Whether [x] is in the candidate window rather than in one of the controls' squares. */
+    fun withinWindow(
+        x: Float,
+        width: Float,
+        height: Float,
+        voiceEnabled: Boolean,
+        trailingSquares: Int = ALWAYS_TRAILING,
+    ): Boolean {
+        val left = suggestionLeft(height)
+        val contentWidth = suggestionWidth(width, height, voiceEnabled, trailingSquares)
+        return contentWidth > 0f && x >= left && x < left + contentWidth
+    }
+
+    /**
+     * The candidate under [x] once the list is scrolled by [scrollPx], or null outside the window.
+     *
+     * The result may be past the end of the list: this knows the window's arithmetic, not how many
+     * candidates there are, and bounding it is the caller's job. It is a position in the whole list
+     * rather than a slot, because a drag can leave the window resting between two candidates.
+     */
+    fun indexAt(
+        x: Float,
+        width: Float,
+        height: Float,
+        voiceEnabled: Boolean,
+        slotCount: Int,
+        trailingSquares: Int = ALWAYS_TRAILING,
+        scrollPx: Float = 0f,
+    ): Int? {
+        if (slotCount <= 0) return null
+        val left = suggestionLeft(height)
+        val contentWidth = suggestionWidth(width, height, voiceEnabled, trailingSquares)
+        if (contentWidth <= 0f || x < left || x >= left + contentWidth) return null
+        val cell = contentWidth / slotCount
+        if (cell <= 0f) return null
+        return floor((x - left + scrollPx) / cell).toInt()
+    }
+
+    /** How far the list travels before its last candidate reaches the far edge of the window. */
+    fun maxScrollPx(
+        width: Float,
+        height: Float,
+        voiceEnabled: Boolean,
+        slotCount: Int,
+        count: Int,
+        trailingSquares: Int = ALWAYS_TRAILING,
+    ): Float {
+        if (slotCount <= 0) return 0f
+        val cell = suggestionWidth(width, height, voiceEnabled, trailingSquares) / slotCount
+        return (count - slotCount).coerceAtLeast(0) * cell
     }
 }
 

@@ -6,6 +6,7 @@ import com.slide.core.layout.Layouts
 import com.slide.core.settings.KeyboardSettings
 import com.slide.core.theme.HexPalette
 import java.io.File
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -179,7 +180,7 @@ class HexBoardPreviewTest {
         // at the right, beside the words.
         val voiceEnabled = true
         val trailing = SuggestionStripLayout.trailingSquares()
-        val suggestionLeft = SuggestionStripLayout.suggestionLeft(stripHeight, voiceEnabled)
+        val suggestionLeft = SuggestionStripLayout.suggestionLeft(stripHeight)
         val suggestionWidth = SuggestionStripLayout.suggestionWidth(
             shot.width,
             stripHeight,
@@ -269,6 +270,155 @@ class HexBoardPreviewTest {
     }
 
     /** The microphone's square, at the left end of the strip, exactly where the view draws it. */
+    /**
+     * The strip alone, in the two states he reported on: with the candidates dragged along, and
+     * with the microphone switched off.
+     *
+     * The whole board is the wrong zoom for either. The bar is 132 px of a 2000 px picture, so the
+     * hole at the left end and the words entering from the side are both invisible at that size.
+     * These are drawn from [SuggestionStripLayout]'s own numbers, the ones the view lays out and hit
+     * tests with, so the picture cannot drift from the arithmetic the tests pin.
+     */
+    @Test
+    fun `writes the strip alone, dragged and with the microphone away`() {
+        val out = File("build/preview").apply { mkdirs() }
+        val eight = listOf("th", "the", "tho", "this", "that", "thy", "then", "they")
+        val cell = SuggestionStripLayout.suggestionWidth(
+            STRIP_WIDTH,
+            stripHeight,
+            voiceEnabled = true,
+            trailingSquares = SuggestionStripLayout.trailingSquares(),
+        ) / 3f
+
+        val rest = stripSvg(eight, scrollPx = 0f, voiceEnabled = true)
+        val dragged = stripSvg(eight, scrollPx = cell * 2f, voiceEnabled = true)
+        val noMic = stripSvg(emptyList(), scrollPx = 0f, voiceEnabled = false)
+
+        for ((name, svg) in listOf("strip-rest" to rest, "strip-dragged" to dragged, "strip-no-mic" to noMic)) {
+            val file = File(out, "$name.svg")
+            file.writeText(svg)
+            println("PREVIEW ${file.absolutePath}")
+        }
+
+        // A picture that drew nothing is still a file, so the two claims are asserted on the SVG
+        // itself: a drag two cells along brings candidates in that were off the rest picture, and
+        // with the microphone away the first control sits on the strip's own left edge.
+        // A picture that drew nothing is still a file, so the two claims are asserted on the SVG:
+        // a drag two cells along brings in candidates the resting picture does not show, and with
+        // the microphone away the two text controls sit on the strip's own left edge with no third
+        // control beside them. That last one is the hole, and it is what the picture is for.
+        assertTrue("the dragged strip shows a candidate the resting one does not", dragged.contains(">that<"))
+        assertTrue("the resting strip does not show it", !rest.contains(">that<"))
+
+        // Only the left-hand group: the emoji button's own glyph is a circle too, so a plain count of
+        // every circle in the picture found six of them and said nothing about the hole.
+        val controls = Regex("""<circle cx="([0-9.]+)"""").findAll(noMic)
+            .map { it.groupValues[1].toFloat() }
+            .filter { it < STRIP_WIDTH / 3f }
+            .toList()
+        assertEquals("with the microphone away exactly the two text controls are on the left", 2, controls.size)
+        assertEquals("the first control sits on the strip's own left edge", stripHeight * 0.5f, controls.min(), 0.01f)
+        assertEquals("the second sits in the square beside it", stripHeight * 1.5f, controls.max(), 0.01f)
+
+        // With the microphone on there is nothing on the left at all: its square is at the other
+        // end of the bar, which is the seat he asked for.
+        val leftWithMic = Regex("""<circle cx="([0-9.]+)"""").findAll(rest)
+            .map { it.groupValues[1].toFloat() }
+            .filter { it < STRIP_WIDTH / 3f }
+            .toList()
+        assertTrue("with the microphone on the left edge belongs to the words", leftWithMic.isEmpty())
+        val micSeat = SuggestionStripLayout.micLeft(STRIP_WIDTH, stripHeight, voiceEnabled = true)
+        assertTrue(
+            "the microphone is drawn in the square inside the trailing buttons",
+            rest.contains("""<circle cx="${micSeat + stripHeight / 2f}"""),
+        )
+    }
+
+    /** The strip on its own, at [STRIP_WIDTH], drawn with the layout's own scroll arithmetic. */
+    private fun stripSvg(words: List<String>, scrollPx: Float, voiceEnabled: Boolean): String {
+        val trailing = SuggestionStripLayout.trailingSquares()
+        val windowLeft = SuggestionStripLayout.suggestionLeft(stripHeight)
+        val windowWidth = SuggestionStripLayout.suggestionWidth(STRIP_WIDTH, stripHeight, voiceEnabled, trailing)
+        // With the microphone away there are no words at all, because that is the state the hole was
+        // in: the strip empty, the two text controls on the left, the microphone gone.
+        val shown = if (voiceEnabled) words else emptyList()
+        val cell = windowWidth / 3f
+        val scrollSlot = if (cell > 0f) kotlin.math.round(scrollPx / cell).toInt() else 0
+        val height = stripHeight
+        val out = StringBuilder()
+        out.append("""<svg xmlns="http://www.w3.org/2000/svg" width="${STRIP_WIDTH.round()}" """)
+        out.append("""height="$height" viewBox="0 0 $STRIP_WIDTH $height">""")
+        out.append("""<rect width="$STRIP_WIDTH" height="$height" fill="${hex(palette.background)}"/>""")
+        out.append("""<clipPath id="window"><rect x="$windowLeft" y="0" width="$windowWidth" height="$height"/></clipPath>""")
+
+        if (shown.size > 3) {
+            val trackWidth = cell * 3f
+            val shownShare = (scrollPx + trackWidth) / (cell * shown.size)
+            out.append(
+                """<line x1="$windowLeft" y1="${height - 2f}" x2="${windowLeft + trackWidth * shownShare}" """ +
+                    """y2="${height - 2f}" stroke="${hex(palette.label)}" stroke-width="2"/>""",
+            )
+        }
+        out.append("""<g clip-path="url(#window)">""")
+        for (slot in -1..3) {
+            val index = scrollSlot + slot
+            val word = shown.getOrNull(index) ?: continue
+            val left = windowLeft + slot * cell - scrollPx
+            out.append(text(word, left + cell / 2f, height / 2f, height * 0.40f, hex(palette.label)))
+        }
+        for (slot in 1..2) {
+            val x = windowLeft + slot * cell - scrollPx
+            out.append(
+                """<line x1="$x" y1="10" x2="$x" y2="${height - 10}" """ +
+                    """stroke="${hex(palette.specialKey)}" stroke-width="1"/>""",
+            )
+        }
+        out.append("</g>")
+
+        // The controls on the left, packed against the edge: the microphone while it is on, and the
+        // two text controls while the strip has nothing to suggest.
+        val groupStart = SuggestionStripLayout.leftGroupStart()
+
+        if (shown.isEmpty()) {
+            for (step in 0..1) {
+                val cx = stripHeight * (groupStart + 0.5f + step)
+                out.append(
+                    """<circle cx="$cx" cy="${height / 2f}" r="${height * 0.36f}" """ +
+                        """fill="${hex(palette.specialKey)}"/>""",
+                )
+                if (step == 0) {
+                    out.append(
+                        """<rect x="${cx - height * 0.12f}" y="${height * 0.38f}" """ +
+                            """width="${height * 0.24f}" height="${height * 0.24f}" fill="none" """ +
+                            """stroke="${hex(palette.label)}" stroke-width="2"/>""",
+                    )
+                } else {
+                    out.append(
+                        """<line x1="${cx - height * 0.12f}" y1="${height * 0.60f}" """ +
+                            """x2="${cx + height * 0.12f}" y2="${height * 0.40f}" """ +
+                            """stroke="${hex(palette.label)}" stroke-width="2"/>""",
+                    )
+                }
+            }
+        }
+
+        out.append(stripButton(STRIP_WIDTH, 3, ::symbolsGlyph))
+        out.append(stripButton(STRIP_WIDTH, 2, ::globeGlyph))
+        out.append(stripButton(STRIP_WIDTH, 1, ::emojiGlyph))
+        // The microphone's own square, the first one inside the trailing buttons.
+        if (voiceEnabled && shown.isNotEmpty()) {
+            out.append(
+                micButton(
+                    SuggestionStripLayout.micLeft(STRIP_WIDTH, stripHeight, voiceEnabled) + stripHeight / 2f,
+                ),
+            )
+        }
+        out.append("</svg>")
+        return out.toString()
+    }
+
+    private val STRIP_WIDTH = 1080f
+
     private fun micButton(centerX: Float): String {
         val out = StringBuilder()
         out.append(

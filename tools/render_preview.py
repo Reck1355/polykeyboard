@@ -36,8 +36,15 @@ def svg_box(path):
 
 
 def lowest_point(svg_text):
+    """The lowest polygon vertex, or None for a picture that has no polygons.
+
+    The hexagon boards are drawn as polygons and their bottom row is what the ink check watches for.
+    A strip preview is rectangles, circles and lines with nothing to clip, so it has no bottom row of
+    vertices - the old code took max() of an empty list and every strip render died on it. Callers
+    treat None as "no vertex check applies to this picture" rather than inventing a number.
+    """
     ys = [float(p.split(",")[1]) for m in re.findall(r'points="([^"]+)"', svg_text) for p in m.split()]
-    return max(ys)
+    return max(ys) if ys else None
 
 
 def preview_svg(name):
@@ -60,7 +67,8 @@ def raster(name):
     svg = svg_path.read_text(encoding="utf-8")
     w, h = svg_box(svg_path)
     low = lowest_point(svg)
-    assert low < h - 2, f"{name}: the SVG clips its own bottom row ({low} vs {h})"
+    if low is not None:
+        assert low < h - 2, f"{name}: the SVG clips its own bottom row ({low} vs {h})"
     html = (HERE / f"{name}.html")
     html.write_text(
         '<!doctype html><html><head><meta charset="utf-8"><style>'
@@ -82,8 +90,13 @@ def raster(name):
     d = np.abs(a.astype(int) - BG).sum(axis=2)
     rows = np.where(d.max(axis=1) > 12)[0]
     reached = int(rows.max())
-    assert reached >= low - 4, f"{name}: ink stops at {reached}, the hexagons go to {low} - clipped"
-    print(f"{name}: {img.size} height={h} lowest_vertex={low} ink={rows.min()}..{reached} OK")
+    if low is None:
+        # No polygons, so nothing to clip: the picture only has to have drawn something at all.
+        assert rows.size and reached > 0, f"{name}: the picture is empty"
+        print(f"{name}: {img.size} height={h} ink={rows.min()}..{reached} OK (no polygon bottom row)")
+    else:
+        assert reached >= low - 4, f"{name}: ink stops at {reached}, the hexagons go to {low} - clipped"
+        print(f"{name}: {img.size} height={h} lowest_vertex={low} ink={rows.min()}..{reached} OK")
     return img
 
 

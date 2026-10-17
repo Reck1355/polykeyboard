@@ -556,7 +556,7 @@ class KeyboardView @JvmOverloads constructor(
             // a bigger step is a taller portrait block or a larger landscape share, and this is the
             // one place the keyboard's own height is measured from it.
             val natural = topInset() + topPadding + header +
-                HexBoard.scaledBoardHeight(
+                HexBoard.frameHeight(
                     HexBoard.cappedBoardHeight(
                         width.toFloat(), displayHeight(), hexSizing(), effectiveHexLayout().rows.size,
                     ),

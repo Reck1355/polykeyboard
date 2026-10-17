@@ -30,7 +30,33 @@ class HexBoardHeightScaleTest {
 
     @Test
     fun `a higher stop asks for a taller board`() {
+        // It asks; what frame it actually gets is another matter, and [HexBoard.frameHeight] is what
+        // answers that. This pins only the arithmetic of the ask.
         assertEquals(capped * 1.4f, HexBoard.scaledBoardHeight(capped, 1.4f), 0.0001f)
+    }
+
+    @Test
+    fun `a frame is never taller than the block that will be drawn in it`() {
+        // His report: "the height doesn't actually make the keys taller past 100 just moves keyboard
+        // up". Width binds in portrait, so past the approved block no height control can make the
+        // hexagons larger: the extra height bought an empty band above the board, while the board
+        // placement control is what moves the board. The frame now stops at the block.
+        assertEquals(capped, HexBoard.frameHeight(capped, 1f), 0.0001f)
+        assertEquals(capped, HexBoard.frameHeight(capped, 1.4f), 0.0001f)
+        assertEquals(capped, HexBoard.frameHeight(capped, 5f), 0.0001f)
+        // Shrinking is untouched: a shorter frame is a genuinely smaller board.
+        assertEquals(capped * 0.7f, HexBoard.frameHeight(capped, 0.7f), 0.0001f)
+    }
+
+    @Test
+    fun `the size ladder is what resizes the portrait board, not the height slider`() {
+        // The ladder spends itself on the hexagon ratio, the one axis portrait has left once the
+        // width is spent. That is why moving it resizes the keys while the height slider above 100
+        // per cent cannot, and why the two controls are not interchangeable.
+        val small = HexBoard.cappedBoardHeight(1080f, 2340f, HexBoard.sizing(HexBoard.Orientation.PORTRAIT, -2))
+        val large = HexBoard.cappedBoardHeight(1080f, 2340f, HexBoard.sizing(HexBoard.Orientation.PORTRAIT, 2))
+        assertTrue("the ladder must actually change the board", large > small)
+        assertEquals(large, HexBoard.frameHeight(large, 1.4f), 0.0001f)
     }
 
     @Test
