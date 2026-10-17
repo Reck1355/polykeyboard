@@ -29,10 +29,19 @@ credit stays intact.
 
 ## Downloads and updates
 
-APK releases are published on this repository's [GitHub Releases](../../releases). Download the
+APKs are published on this repository's [GitHub Releases](../../releases). Download the
 latest release APK, open it on an Android device, and allow the browser or file manager to
-install unknown apps when Android asks. Future APKs signed with the same release key install as
-updates over this one. Polykeyboard does not use Google Play.
+install unknown apps when Android asks. Polykeyboard does not use Google Play.
+
+Releases are signed with the same private key every time, so a newer APK installs as an
+update over an older one. The signing certificate is `CN=Reck1355, O=Polykeyboard`. The
+package name is `com.reck1355.polykeyboard`, deliberately not the fork parent's, so a
+Polykeyboard release also installs beside any Slide build rather than fighting it for one
+slot. Releases before 0.1.11 were preview builds under the standard Android debug key and a
+different package name; they install side by side with these and can be removed at any time.
+
+The download is large, currently around 245 MB, and almost all of it is the Whisper model
+that makes dictation work with no network. There is no smaller build yet.
 
 Update checks are off by default. If enabled in Polykeyboard's settings, the app checks public GitHub
 releases (including prereleases when selected). It verifies the selected asset's published

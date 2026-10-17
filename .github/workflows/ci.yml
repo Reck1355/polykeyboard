@@ -5,6 +5,8 @@ on:
     branches: [main]
   push:
     branches: [main]
+  # The packaged-runtime job below is manual only, so the trigger has to exist for it.
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -93,6 +95,15 @@ jobs:
 
   instrumentation:
     name: Packaged runtime (Android ${{ matrix.api }})
+    # Manual only, and the reason is measured rather than stylistic. This app ships
+    # arm64-v8a and armeabi-v7a and nothing else, deliberately: the x86 libraries were
+    # 17.5 MB of every download for a device nobody types on. GitHub's runners are x86,
+    # so their emulators cannot install this APK at all, and an arm image runs far too
+    # slowly to be useful. The tests themselves are not wrong, they simply need an arm
+    # device: run this workflow by hand when one is attached. Leaving it on for every
+    # push made the repo permanently red, which tells a visitor nothing and hides the
+    # job that does work.
+    if: ${{ github.event_name == 'workflow_dispatch' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     strategy:

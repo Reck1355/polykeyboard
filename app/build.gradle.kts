@@ -20,11 +20,15 @@ android {
             // armeabi-v7a is kept for a device older than it and costs 2.3 MB, which is not worth the doubt.
             abiFilters += listOf("arm64-v8a", "armeabi-v7a")
         }
-        applicationId = "com.slide"
+        // Our own identity, not the fork parent's. This is the package Android uses as
+        // the app's identity on the device: it decides which installs update which. It is
+        // deliberately NOT com.slide, so a release-signed Polykeyboard also installs
+        // side by side with any Slide build rather than fighting it for one slot.
+        applicationId = "com.reck1355.polykeyboard"
         minSdk = 26
         targetSdk = 37
-        versionCode = 30
-        versionName = "0.1.10"
+        versionCode = 31
+        versionName = "0.1.11"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
