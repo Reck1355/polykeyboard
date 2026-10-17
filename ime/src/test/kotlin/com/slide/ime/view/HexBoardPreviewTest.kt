@@ -101,6 +101,25 @@ class HexBoardPreviewTest {
         topOffset = stripHeight,
     )
 
+    @Test
+    fun `every drawn point of the board is inside the picture, bottom row included`() {
+        // The failure this guards: the picture's height came from the caps, every hexagon hangs a
+        // point below its cap, and the bottom row arrived with its points sliced off. This reads the
+        // SVG the way a viewer does - the lowest vertex drawn has to sit inside the viewBox.
+        for (shot in shots) {
+            val svg = render(shot)
+            val viewHeight = Regex("""height="([0-9.]+)" viewBox""").find(svg)!!.groupValues[1].toFloat()
+            val lowest = Regex("""points="([^"]+)"""").findAll(svg)
+                .flatMap { m -> m.groupValues[1].split(" ").filter { it.contains(",") } }
+                .map { pair -> pair.substringAfter(",").toFloat() }
+                .max()
+            assertTrue(
+                "${shot.name}: the lowest hexagon point ($lowest) sits inside the picture ($viewHeight)",
+                lowest < viewHeight - 2f,
+            )
+        }
+    }
+
     /**
      * The board as the keyboard actually builds it, digit row and all.
      *
@@ -120,9 +139,14 @@ class HexBoardPreviewTest {
     private fun render(shot: Shot): String {
         val placement = place(shot)
         val boardTop = stripHeight
-        // Measured off the drawn caps rather than the block, because every cap overhangs its row
-        // into its neighbour's, so a height taken from the block alone clips the two end rows.
-        val height = placement.keys.maxOf { it.bottom } + 6f
+        // Measured off the drawn hexagons rather than the caps: a cap's bottom is the bottom of its
+        // cell, and every hexagon hangs a point below that, so a height taken from the caps cut the
+        // bottom row's points off the picture — which is what he saw and reported twice. This is the
+        // same shape function the polygons below are drawn from, so the two cannot drift apart.
+        val height = placement.keys.maxOf { placed ->
+            val shape = KeyGeometry.hexShapeFor(placed)
+            shape.centerY + shape.halfHeight
+        } + 18f
         val out = StringBuilder()
         out.append("""<svg xmlns="http://www.w3.org/2000/svg" width="${shot.width.round()}" """)
         out.append("""height="${height.round()}" viewBox="0 0 ${shot.width} $height">""")

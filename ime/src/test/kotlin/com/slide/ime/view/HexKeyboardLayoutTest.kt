@@ -183,25 +183,25 @@ class HexKeyboardLayoutTest {
     }
 
     @Test
-    fun `the bottom row is comma, enter, space, backspace, period`() {
+    fun `the bottom row is comma, backspace, space, enter, period`() {
         val bottom = rowKeys(placed(), 3)
 
         assertEquals(
             listOf(
                 KeyType.CHARACTER,
-                KeyType.ENTER,
-                KeyType.SPACE,
                 KeyType.DELETE,
+                KeyType.SPACE,
+                KeyType.ENTER,
                 KeyType.CHARACTER,
             ),
             bottom.map { it.key.type },
         )
         assertEquals(",", bottom[0].key.label)
         assertEquals(".", bottom[4].key.label)
-        // The enter and the backspace sit either side of the space bar, which is where a thumb is
-        // when it goes for either of them.
-        assertEquals(KeyType.ENTER, bottom[1].key.type)
-        assertEquals(KeyType.DELETE, bottom[3].key.type)
+        // The backspace sits at the space bar's left and the enter at its right, on his word: the
+        // two sides were the other way round in the first pass and he corrected them.
+        assertEquals(KeyType.DELETE, bottom[1].key.type)
+        assertEquals(KeyType.ENTER, bottom[3].key.type)
         // A hex and a half at each end: seven cells centred on the ten-cell grid, so the board
         // narrows a cell a side all the way down and the row above is still half a cell out of step.
         assertEquals(1.5f * cellWidth, bottom.first().left, 0.01f)
@@ -231,10 +231,10 @@ class HexKeyboardLayoutTest {
             zRow.map { it.key.type }.filter { it == KeyType.DELETE || it == KeyType.ENTER },
         )
 
-        // And on the bottom row backspace is at the space bar's right, past the period.
+        // And on the bottom row backspace is at the space bar's left, out of every letter's reach.
         val bottom = rowKeys(keys, 3)
-        assertEquals(".", bottom[4].key.label)
-        assertEquals(KeyType.DELETE, bottom[3].key.type)
+        assertEquals(",", bottom[0].key.label)
+        assertEquals(KeyType.DELETE, bottom[1].key.type)
         assertEquals(KeyType.SPACE, bottom[2].key.type)
     }
 
@@ -772,7 +772,7 @@ class HexKeyboardLayoutTest {
         assertEquals(0xFF0E1417.toInt(), HexPalette.Jade.background)
         assertEquals(0xFF1F6F5C.toInt(), HexPalette.Jade.key)
         assertEquals(0xFF17564A.toInt(), HexPalette.Jade.specialKey)
-        assertEquals(0xFFA8452B.toInt(), HexPalette.Jade.enterKey)
+        assertEquals(0xFF3A947C.toInt(), HexPalette.Jade.enterKey)
         assertEquals(0xFFF5F7F6.toInt(), HexPalette.Jade.label)
         assertEquals(0x40FFFFFF, HexPalette.Jade.pressed)
     }

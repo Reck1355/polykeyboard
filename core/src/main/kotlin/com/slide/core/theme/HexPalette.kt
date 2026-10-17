@@ -21,7 +21,12 @@ data class HexPalette(
     val key: Int,
     /** Shift, delete, `?123`, emoji and the globe. */
     val specialKey: Int,
-    /** Enter, which earns its own colour because it is the one key that ends a thought. */
+    /**
+     * Enter, which earns its own colour because it is the one key that ends a thought.
+     *
+     * Lifted jade rather than a hue of its own: Jacky struck the oxblood this slot used to hold out
+     * of the family palette on sight (2026-10-17), and jade is the house accent.
+     */
     val enterKey: Int,
     /** Every glyph: letters, action icons and the space bar's caption. */
     val label: Int,
@@ -39,7 +44,7 @@ data class HexPalette(
             background = 0xFF0E1417.toInt(),
             key = 0xFF1F6F5C.toInt(),
             specialKey = 0xFF17564A.toInt(),
-            enterKey = 0xFFA8452B.toInt(),
+            enterKey = 0xFF3A947C.toInt(),
             label = 0xFFF5F7F6.toInt(),
             pressed = 0x40FFFFFF,
         )

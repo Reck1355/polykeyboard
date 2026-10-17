@@ -276,8 +276,8 @@ object Layouts {
             KeyRow(
                 // Two keys, a three-cell space, two keys: seven cells, one hex in from each edge
                 // more than the row above, so the board narrows by a cell a side all the way down —
-                // ten, nine, eight, seven. The enter and the backspace sit either side of the space
-                // bar, which is where a thumb already is when it goes for either of them.
+                // ten, nine, eight, seven. The backspace sits at the space bar's left and the enter
+                // at its right, which is where his thumbs went looking for them.
                 //
                 // Seven is also the smallest row that centres on the ten-cell grid and stays half a
                 // cell out of step with the row above, and the space keeps all three of its cells:
@@ -289,9 +289,9 @@ object Layouts {
                 // keep their places at this row's ends rather than being spent on it.
                 listOf(
                     comma,
-                    enter.copy(widthWeight = 1f),
-                    space.copy(widthWeight = 3f),
                     delete.copy(widthWeight = 1f),
+                    space.copy(widthWeight = 3f),
+                    enter.copy(widthWeight = 1f),
                     period,
                 ),
                 leadingGap = 1.5f,

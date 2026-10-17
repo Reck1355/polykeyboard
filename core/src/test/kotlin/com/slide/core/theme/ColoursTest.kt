@@ -32,7 +32,7 @@ class ColoursTest {
         assertEquals(0xFF0E1417.toInt(), palette.background)
         assertEquals(0xFF1F6F5C.toInt(), palette.key)
         assertEquals(0xFF17564A.toInt(), palette.specialKey)
-        assertEquals(0xFFA8452B.toInt(), palette.enterKey)
+        assertEquals(0xFF3A947C.toInt(), palette.enterKey)
         assertEquals(0xFFF5F7F6.toInt(), palette.label)
         assertEquals(0x40FFFFFF, palette.pressed)
     }
