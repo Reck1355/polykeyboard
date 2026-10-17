@@ -35,8 +35,8 @@ android {
         applicationId = "com.reck1355.polykeyboard"
         minSdk = 26
         targetSdk = 37
-        versionCode = 31
-        versionName = "0.1.11"
+        versionCode = 32
+        versionName = "0.1.12"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
