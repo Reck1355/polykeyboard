@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Polykeyboard: seven hexagons, one rust - the honeycomb the keys are cut from. -->
+<!-- Polykeyboard: seven hexagons, one lifted jade - the honeycomb the keys are cut from. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp"
     android:height="108dp"
@@ -17,7 +17,7 @@
         android:fillColor="#17564A" />
     <path
         android:pathData="M72.342,51.504 L82.500,57.369 L82.500,69.098 L72.342,74.962 L62.185,69.098 L62.185,57.369 Z"
-        android:fillColor="#A8452B" />
+        android:fillColor="#3A947C" />
     <path
         android:pathData="M54.000,60.738 L64.158,66.602 L64.158,78.331 L54.000,84.196 L43.842,78.331 L43.842,66.602 Z"
         android:fillColor="#17564A" />
