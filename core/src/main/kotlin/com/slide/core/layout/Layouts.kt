@@ -334,70 +334,30 @@ object Layouts {
     )
 
     /**
-     * The honeycomb's bottom row with one address delimiter in it (`@` for email, `/` for a URL).
+     * The board an email field gets: the letters board itself.
      *
-     * Nine cells exactly, like the letters board's own bottom row: `?123`, the delimiter where the
-     * comma sits, the space bar, the period, `.com`, and enter. The globe and the emoji key are not
-     * here because they are not on any board now — they sit on the strip above, where they are
-     * reachable from every page. Space takes up the two cells they gave back, and the ten-column
-     * board is what stays: a row one cell wider would scale the whole honeycomb down to fit it.
-     */
-    private fun hexDelimiterRow(delimiter: String) = KeyRow(
-        listOf(
-            toSymbols.copy(widthWeight = 1f),
-            sym(delimiter),
-            space.copy(widthWeight = 4f),
-            period,
-            Key(".com", KeyType.CHARACTER, output = ".com", gestureEligible = false),
-            enter.copy(widthWeight = 1f),
-        ),
-        HEX_ROW_OFFSET,
-        HEX_ROW_OFFSET,
-    )
-
-    /**
-     * One delimiter row per mode, shared by both languages.
+     * It used to be the letters board with an address row of its own - `?123`, `@`, a four-cell
+     * space, the period, `.com`, enter - and that row was a different keyboard. No backspace on it
+     * at all, no caps, no comma, and a space bar a cell wider than the letters board's, so every
+     * key he reaches for sat a different distance from his thumb than it did a field earlier. He
+     * reported it as exactly that: *my keyboard is also different when I'm in the browser*. The fix
+     * is not a row that matches the letters board's. It is the letters board.
      *
-     * The letters board shares its bottom row between English and Spanish for the same reason
-     * written above: nothing in it is a letter, so two copies that drifted apart would be a
-     * difference no language asked for.
-     */
-    private val hexEmailRow = hexDelimiterRow("@")
-
-    /** The URL delimiter row, shared by both languages. */
-    private val hexUriRow = hexDelimiterRow("/")
-
-    /**
-     * [HexQwertyEn] with the email row's delimiters.
+     * Nothing that row carried is lost: `/` and `@` are on the `?123` page, and `.com` is typed.
      *
-     * The stock keyboard answers an email field and a browser's address bar with its own
-     * rectangular boards, which is why the hex board disappeared exactly there: the two modes the
-     * outside world asks for most often were the two the honeycomb did not cover. These boards put
-     * `@` and `/` on the bottom row of the same honeycomb, so the mode a field asks for no longer
-     * changes the board's shape.
+     * The ids stay, so the field a keyboard was opened for still has a name, and a mode can be
+     * given a board of its own again without touching this one.
      */
-    val HexEmailEn = HexQwertyEn.copy(
-        id = ID_HEX_EMAIL,
-        rows = HexQwertyEn.rows.dropLast(1) + hexEmailRow,
-    )
+    val HexEmailEn = HexQwertyEn.copy(id = ID_HEX_EMAIL)
 
-    /** [HexEmailEn]'s URL counterpart, with `/` on the bottom row. */
-    val HexUriEn = HexQwertyEn.copy(
-        id = ID_HEX_URI,
-        rows = HexQwertyEn.rows.dropLast(1) + hexUriRow,
-    )
+    /** [HexEmailEn]'s URL counterpart: the letters board, and the same one. */
+    val HexUriEn = HexQwertyEn.copy(id = ID_HEX_URI)
 
-    /** [HexEmailEn] in Spanish; the delimiters and the letter positions are identical. */
-    val HexEmailEs = HexQwertyEs.copy(
-        id = ID_HEX_EMAIL_ES,
-        rows = HexQwertyEs.rows.dropLast(1) + hexEmailRow,
-    )
+    /** [HexEmailEn] in Spanish; the same board it is in English, letters and all. */
+    val HexEmailEs = HexQwertyEs.copy(id = ID_HEX_EMAIL_ES)
 
-    /** [HexUriEs]'s counterpart, with `/` on the bottom row. */
-    val HexUriEs = HexQwertyEs.copy(
-        id = ID_HEX_URI_ES,
-        rows = HexQwertyEs.rows.dropLast(1) + hexUriRow,
-    )
+    /** [HexUriEs]'s counterpart, with `/` reachable the same way. */
+    val HexUriEs = HexQwertyEs.copy(id = ID_HEX_URI_ES)
 
     /**
      * The honeycomb's half-key stagger, in width units — 0.5 cells, one half of a key.

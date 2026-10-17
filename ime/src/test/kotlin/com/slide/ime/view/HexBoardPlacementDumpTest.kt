@@ -6,6 +6,7 @@ import com.slide.core.layout.Layouts
 import com.slide.core.settings.KeyboardSize
 import java.io.File
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -44,8 +45,9 @@ class HexBoardPlacementDumpTest {
     /**
      * The two boards a browser's address bar and an email field ask for, on portrait's own screen.
      *
-     * They exist because those modes used to drop to the stock keyboard's rectangles; the picture is
-     * the check that they are the same honeycomb with a delimiter in it, not a lookalike.
+     * They exist because those modes used to drop to the stock keyboard's rectangles. They were
+     * given address rows of their own, which turned out to be a second keyboard; the picture is the
+     * check that they are now the letters board itself, cell for cell, and not a lookalike.
      */
     private val portraitEmail = portrait.copy(name = "portrait-email", layout = Layouts.HexEmailEn)
     private val portraitUri = portrait.copy(name = "portrait-uri", layout = Layouts.HexUriEn)
@@ -160,7 +162,17 @@ class HexBoardPlacementDumpTest {
     }
 
     @Test
-    fun `the address boards place on the same ten columns, delimiter and all`() {
+    fun `the address boards place exactly where the letters board does`() {
+        // The mode a field asks for used to change the board: the address row put `@` or `/` where
+        // the comma sits, `.com` where the period does, and the space bar over four cells instead of
+        // three. He saw it and said so - my keyboard is also different when I'm in the browser - so
+        // the property that has to hold now is that a browser field places key for key on top of the
+        // letters board, same columns, same cells, same space bar, no address row anywhere.
+        val letters = place(portrait, KeyboardSize.DEFAULT_STEP)
+        val lettersCells = letters.keys
+            .sortedWith(compareBy({ it.row }, { it.left }))
+            .map { "${it.key.label}|${it.key.type}|${it.row}|${it.left}|${it.width}" }
+
         for (screen in listOf(portraitEmail, portraitUri)) {
             val placement = place(screen, KeyboardSize.DEFAULT_STEP)
             assertEquals(
@@ -176,9 +188,16 @@ class HexBoardPlacementDumpTest {
                 placement.keys.count { it.key.type == KeyType.SPACE },
             )
             assertNull("${screen.name}: one board, no channel", placement.channel)
-            assertTrue(
-                "${screen.name}: the delimiter is on the bottom row",
-                placement.keys.any { it.row == 3 && it.key.outputText in setOf("@", "/") },
+            assertEquals(
+                "${screen.name}: every key is the letters board's key in the letters board's cell",
+                lettersCells,
+                placement.keys
+                    .sortedWith(compareBy({ it.row }, { it.left }))
+                    .map { "${it.key.label}|${it.key.type}|${it.row}|${it.left}|${it.width}" },
+            )
+            assertFalse(
+                "${screen.name}: no address delimiter is left on the board",
+                placement.keys.any { it.key.outputText in setOf("@", "/", ".com") },
             )
         }
     }

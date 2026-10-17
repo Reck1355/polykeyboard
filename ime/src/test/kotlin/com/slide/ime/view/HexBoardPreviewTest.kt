@@ -54,6 +54,11 @@ class HexBoardPreviewTest {
             HexBoard.heightCap(1080f, HexBoard.sizing(HexBoard.Orientation.LANDSCAPE)),
             Layouts.HexQwertyEn,
         ),
+        // What a browser's address bar answers with. It is the letters board, and the picture is how
+        // that is checked without a phone: the assertions below hold for every shot, so if a field
+        // ever gets a board of its own again - and the address row that did have no backspace on it -
+        // this picture is what fails first.
+        Shot("portrait-browser", HexBoard.Orientation.PORTRAIT, 1080f, 2000f, Layouts.HexEmailEn),
     )
 
     @Test

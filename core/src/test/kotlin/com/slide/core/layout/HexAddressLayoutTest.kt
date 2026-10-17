@@ -2,24 +2,25 @@ package com.slide.core.layout
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
-import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
  * A browser's address bar and an email field are the two modes the outside world asks for most, and
- * they were the two the honeycomb did not cover: the editor mode chose the stock keyboard's
- * rectangular address boards and the hex board disappeared exactly there.
+ * they used to be the two that asked for a different keyboard.
  *
- * These boards put the delimiter on the honeycomb's own bottom row instead. Two things are pinned
- * here, and the first is the one that fixes the report: **every board the table hands out for a
- * text-ish mode is a hex board**, so the mode a field asks for can no longer change the keyboard's
- * shape. The second is the shape itself: four rows of 10 / 9 / 7 / 6 keys with the same half-cell
- * stagger, a space bar, and one cell per key otherwise, which is the ten-column board the size
- * ladder and the landscape split are all measured against. The cells each row covers are what those
- * two are measured against and those are unchanged: caps and backspace took the cells the z-row's
- * ends gave up, and space took the two the globe and the emoji key left behind.
+ * First the stock board took over there and the honeycomb disappeared. Then the honeycomb came back
+ * with an address row of its own - `?123`, `@` or `/`, a four-cell space, the period, `.com`, enter -
+ * which was worse in the way that is hardest to notice from a desk: it was a *second* keyboard, with
+ * no backspace on it at all and every key a different distance from his thumb, so the muscle memory
+ * he had just built on the letters board was wrong one field over. He reported it plainly: *my
+ * keyboard is also different when I'm in the browser*.
+ *
+ * What is pinned here is that there is now one board. The modes still have their own ids, and a
+ * field still names the mode it wants; they all resolve to the letters board, row for row, the same
+ * row objects rather than copies. The keys the address row carried are still reachable - `@` and `/`
+ * are on the `?123` page - so nothing was given up for it but the surprise.
  */
 class HexAddressLayoutTest {
 
@@ -50,102 +51,98 @@ class HexAddressLayoutTest {
     }
 
     @Test
-    fun `each address board is the same honeycomb with a delimiter in it`() {
-        for (board in englishAddress + spanishAddress) {
-            val counts = board.rows.map { it.keys.size }
-            assertEquals("${board.id}: four rows of 10 / 9 / 8 / 6", listOf(10, 9, 8, 6), counts)
-            // The board as authored is four rows. A digit row is added on top by the setting, not baked
-            // in, and these boards now accept one: a number row over an email address is worth having, and
-            // the honeycomb's own row is what arrives.
-            assertTrue("${board.id}: accepts a digit row", board.supportsNumberRow)
-            val spaces = board.rows.flatMap { it.keys }.filter { it.type == KeyType.SPACE }
-            assertEquals("${board.id}: one space bar", 1, spaces.size)
-            // Four, not three: the row still covers nine cells with the globe and the emoji key
-            // gone, and the space bar is where the slack went.
-            assertEquals("${board.id}: over four cells", 4f, spaces.single().widthWeight, 0f)
-            assertEquals("${board.id}: every key but space is one cell",
-                1f, board.rows.flatMap { it.keys }.filter { it.type != KeyType.SPACE }
-                    .maxOf { it.widthWeight }, 0f)
-            val bottom = board.rows.last()
-            assertEquals("${board.id}: the staggered bottom row", 0.5f, bottom.leadingGap, 0f)
-            assertEquals("${board.id}: nine cells and two half gaps make ten", 10f,
-                1f + bottom.keys.sumOf { it.widthWeight.toDouble() }.toFloat(), 0f)
-        }
-    }
-
-    @Test
-    fun `email carries at and uri carries slash, and both carry dot com`() {
-        val emailOutputs = Layouts.HexEmailEn.rows.last().keys.map { it.outputText }
-        val uriOutputs = Layouts.HexUriEn.rows.last().keys.map { it.outputText }
-        assertTrue(emailOutputs.contains("@"))
-        assertFalse("the email row is not the URL row", emailOutputs.contains("/"))
-        assertTrue(uriOutputs.contains("/"))
-        assertFalse("the URL row is not the email row", uriOutputs.contains("@"))
-        for (outputs in listOf(emailOutputs, uriOutputs)) {
-            assertTrue(outputs.contains(".com"))
-            assertTrue(outputs.contains("."))
-        }
-        for (board in listOf(Layouts.HexEmailEn, Layouts.HexUriEn)) {
-            assertTrue(
-                "${board.id} keeps the way into the symbols page",
-                board.rows.last().keys.any { it.type == KeyType.SYMBOLS },
-            )
-            // Not on the board any more. The globe and the emoji key are buttons on the strip
-            // above it, which is the one place they are reachable from every page.
-            assertFalse(
-                "${board.id} still carries a strip button",
-                board.rows.flatMap { it.keys }
-                    .any { it.type == KeyType.LANGUAGE || it.type == KeyType.EMOJI },
-            )
-        }
-    }
-
-    @Test
-    fun `the letters rows are the letters board's own rows, shared rather than copied`() {
+    fun `the board a browser gets is the letters board, row for row`() {
         for (board in englishAddress) {
-            assertEquals(3, board.rows.dropLast(1).size)
-            for (index in 0..2) {
+            assertEquals(
+                "${board.id} is not four rows tall",
+                Layouts.HexQwertyEn.rows.size,
+                board.rows.size,
+            )
+            for ((index, row) in board.rows.withIndex()) {
                 assertSame(
-                    "row $index of ${board.id} is HexQwertyEn's own row",
+                    "row $index of ${board.id} is HexQwertyEn's own row, not a copy",
                     Layouts.HexQwertyEn.rows[index],
-                    board.rows[index],
+                    row,
                 )
             }
         }
         for (board in spanishAddress) {
-            for (index in 0..2) {
+            assertEquals(Layouts.HexQwertyEs.rows.size, board.rows.size)
+            for ((index, row) in board.rows.withIndex()) {
                 assertSame(
-                    "row $index of ${board.id} is HexQwertyEs's own row",
+                    "row $index of ${board.id} is HexQwertyEs's own row, not a copy",
                     Layouts.HexQwertyEs.rows[index],
-                    board.rows[index],
+                    row,
                 )
             }
+        }
+    }
+
+    @Test
+    fun `every key of a browser field is where the letters board puts it`() {
+        // The whole point of the change, stated as the property rather than as a key list: for each
+        // mode the outside world asks for, key n of row m is the same key in the same cell with the
+        // same width as it is on the letters board. A backspace that exists on one board and not the
+        // other fails this, and so does a space bar that is three cells in one field and four in the
+        // next - both of which the address row did.
+        val modes = listOf(
+            Layouts.HexEmailEn to Layouts.HexQwertyEn,
+            Layouts.HexUriEn to Layouts.HexQwertyEn,
+            Layouts.HexEmailEs to Layouts.HexQwertyEs,
+            Layouts.HexUriEs to Layouts.HexQwertyEs,
+        )
+        for ((mode, letters) in modes) {
+            for ((rowIndex, row) in mode.rows.withIndex()) {
+                val lettersRow = letters.rows[rowIndex]
+                assertEquals("${mode.id}: row $rowIndex key count", lettersRow.keys.size, row.keys.size)
+                assertEquals("${mode.id}: row $rowIndex leading gap", lettersRow.leadingGap, row.leadingGap, 0f)
+                assertEquals("${mode.id}: row $rowIndex trailing gap", lettersRow.trailingGap, row.trailingGap, 0f)
+                for ((keyIndex, key) in row.keys.withIndex()) {
+                    val lettersKey = lettersRow.keys[keyIndex]
+                    assertEquals("${mode.id}: row $rowIndex key $keyIndex", lettersKey, key)
+                }
+            }
+            assertEquals(
+                "${mode.id}: one backspace, like the letters board",
+                1,
+                mode.rows.flatMap { it.keys }.count { it.type == KeyType.DELETE },
+            )
+            assertEquals(
+                "${mode.id}: one space bar, over the letters board's three cells",
+                1,
+                mode.rows.flatMap { it.keys }.filter { it.type == KeyType.SPACE }.size,
+            )
+            assertEquals(
+                "${mode.id}: the space bar is the letters board's width",
+                letters.rows.flatMap { it.keys }.first { it.type == KeyType.SPACE }.widthWeight,
+                mode.rows.flatMap { it.keys }.first { it.type == KeyType.SPACE }.widthWeight,
+                0f,
+            )
+        }
+    }
+
+    @Test
+    fun `the delimiters an address row used to carry are on the symbols page`() {
+        // Nothing was given up for the single board but the surprise: `@` and `/` are one tap away
+        // on the `?123` page, which every board opens, browser and email field included.
+        for (pages in listOf(
+            Layouts.pagesFor(hexKeys = true),
+            Layouts.pagesFor(hexKeys = false),
+        )) {
+            val symbols = pages.symbols.rows.flatMap { it.keys }.map { it.outputText }
+            assertTrue("the symbols page carries @", "@" in symbols)
+            assertTrue("the symbols page carries /", "/" in symbols)
         }
     }
 
     @Test
     fun `the letters board keeps its comma and its period`() {
-        // The address rows give the comma's cell up to the delimiter and the period's to `.com`. The
-        // letters board must not have given either up with them. The comma still opens the bottom
-        // row; the period has moved up to the z-row's end, which is where he put it.
+        // The address rows used to give the comma's cell up to the delimiter and the period's to
+        // `.com`. Neither is given up now. The comma still opens the bottom row; the period ends the
+        // z-row, which is where he moved it.
         val bottom = Layouts.HexQwertyEn.rows.last().keys.map { it.outputText }
         assertEquals("five keys, the comma first", 5, Layouts.HexQwertyEn.rows.last().keys.size)
         assertEquals(",", bottom.first())
         assertEquals(".", Layouts.HexQwertyEn.rows[2].keys.last().outputText)
-    }
-
-    @Test
-    fun `Spanish and English address boards differ only in their letters`() {
-        assertSame(
-            "one delimiter row serves both languages",
-            Layouts.HexEmailEn.rows.last(),
-            Layouts.HexEmailEs.rows.last(),
-        )
-        assertSame(Layouts.HexUriEn.rows.last(), Layouts.HexUriEs.rows.last())
-        assertNotEquals(
-            "the two modes are not the same board",
-            Layouts.HexEmailEn.id,
-            Layouts.HexUriEn.id,
-        )
     }
 }
