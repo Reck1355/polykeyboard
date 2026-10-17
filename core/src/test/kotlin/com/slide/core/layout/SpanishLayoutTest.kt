@@ -73,10 +73,12 @@ class SpanishLayoutTest {
             }
         }
         // The hex z-row is the classic row's letters, neither of its outer keys: caps and
-        // backspace are on the bottom row now, on both boards.
+        // backspace are on the bottom row now, on both boards. The eighth key on the hex row is the
+        // comma, which the classic row does not carry and which no language owns, so the comparison
+        // is against the row's letters.
         assertEquals(
             Layouts.QwertyEn.rows[2].keys.drop(1).dropLast(1).map { it.hint },
-            Layouts.HexQwertyEn.rows[2].keys.map { it.hint },
+            Layouts.HexQwertyEn.rows[2].keys.filter(::isLetterKey).map { it.hint },
         )
     }
 

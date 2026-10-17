@@ -53,7 +53,7 @@ class HexAddressLayoutTest {
     fun `each address board is the same honeycomb with a delimiter in it`() {
         for (board in englishAddress + spanishAddress) {
             val counts = board.rows.map { it.keys.size }
-            assertEquals("${board.id}: four rows of 10 / 9 / 7 / 6", listOf(10, 9, 7, 6), counts)
+            assertEquals("${board.id}: four rows of 10 / 9 / 8 / 6", listOf(10, 9, 8, 6), counts)
             // The board as authored is four rows. A digit row is added on top by the setting, not baked
             // in, and these boards now accept one: a number row over an email address is worth having, and
             // the honeycomb's own row is what arrives.

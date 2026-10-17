@@ -285,9 +285,9 @@ class HexKeyboardSizeTest {
             assertTrue("step $step: the board spans the width", board.spansViewport)
             assertTrue("step $step: no key leaves the viewport", board.keys.all { it.left >= -0.01f && it.right <= portraitWidth + 0.01f })
 
-            // The grid itself: four rows of ten, nine, nine and seven keys, at the same stagger —
+            // The grid itself: four rows of ten, nine, eight and seven keys, at the same stagger —
             // measured off the placed keys, so a resize that moved a row would fail here.
-            assertEquals("step $step rows", listOf(10, 9, 7, 7), (0..3).map { row(board.keys, it).size })
+            assertEquals("step $step rows", listOf(10, 9, 8, 7), (0..3).map { row(board.keys, it).size })
             assertCells(defaultOffsets, HexBoard.rowOffsetsInCells(board.keys, board.cellWidth), "step $step row offsets")
             assertCells(
                 listOf(0.5f, 0.5f, 0.5f),
@@ -336,7 +336,7 @@ class HexKeyboardSizeTest {
             assertEquals("step $step: the left half is anchored to the left edge", 0f, left.minOf { it.left }, 0.01f)
             assertEquals("step $step: the right half is anchored to the right edge", landscapeWidth, right.maxOf { it.right }, 0.01f)
             assertEquals("step $step left rows", listOf(5, 5, 4, 4), (0..3).map { row(left, it).size })
-            assertEquals("step $step right rows", listOf(5, 4, 3, 4), (0..3).map { row(right, it).size })
+            assertEquals("step $step right rows", listOf(5, 4, 4, 4), (0..3).map { row(right, it).size })
             assertEquals(
                 "step $step: the channel opens at the left inner edge",
                 left.maxOf { it.right },
@@ -441,7 +441,7 @@ class HexKeyboardSizeTest {
             assertTrue("${key.key.label.ifEmpty { key.key.type.name }} is inside the frame", cap.bottom <= shortFrame + 0.1f)
         }
         // It is still the untouched portrait grid, only a flatter hexagon.
-        assertEquals(listOf(10, 9, 7, 7), (0..3).map { row(board.keys, it).size })
+        assertEquals(listOf(10, 9, 8, 7), (0..3).map { row(board.keys, it).size })
 
         // A frame with room for it changes nothing at all — the clamp is only ever a response to
         // height that is not there.

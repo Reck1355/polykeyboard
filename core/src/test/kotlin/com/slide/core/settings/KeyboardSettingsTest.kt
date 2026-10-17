@@ -420,7 +420,8 @@ class KeyboardSettingsTest {
             languageTag = "es-ES",
             showKeyBorders = true,
             showKeyPreview = false,
-            showNumberRow = false,
+            // The digit row is off by default now, so its non-default value is on.
+            showNumberRow = true,
             keyHeightScale = 1.3f,
             portraitBoardOffsetDp = 24f,
             landscapeBoardOffsetDp = -32f,

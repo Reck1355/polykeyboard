@@ -90,7 +90,7 @@ class HexKeyboardLayoutTest {
         // the bottom row took both on. What must not move is the width: a row one cell narrow or
         // wide would scale the whole honeycomb to fit it, so the cells each row covers is the
         // property, not the number of keys in it.
-        assertEquals(listOf(10, 9, 7, 7), (0..3).map { rowKeys(keys, it).size })
+        assertEquals(listOf(10, 9, 8, 7), (0..3).map { rowKeys(keys, it).size })
 
         // Both insets pinned to numbers, not inferred from what is left over: an assertion that
         // derives its expected value from the placed keys passes whatever the row does, which is
@@ -200,7 +200,8 @@ class HexKeyboardLayoutTest {
         )
         assertEquals(",", bottom[2].key.label)
         assertEquals(".", bottom[4].key.label)
-        // One cell margins: the row is inset half a key at each end, like the a-row above it.
+        // Half a cell at each end: nine cells centred on the ten-cell grid, so the space bar lands
+        // on the board's midline and the row above it is still exactly half a cell out of step.
         assertEquals(0.5f * cellWidth, bottom.first().left, 0.01f)
         assertEquals(0.5f * cellWidth, boardWidth - bottom.last().right, 0.01f)
     }
@@ -210,16 +211,19 @@ class HexKeyboardLayoutTest {
         val keys = placed()
 
         // Backspace sat at the end of the z-row, one slip from the M a thumb had just pressed, and
-        // caps at the other end, past the Z. Neither is on a letter row now.
+        // caps at the other end, past the Z. Neither is on a letter row now. A comma does sit at
+        // this row's right end, and that is what makes the row eight cells: centred on the ten-cell
+        // grid, and half a cell out of step with the row above instead of a whole one. A comma is a
+        // punctuation key. What must not be at the end of a letter row is a destructive one.
         val zRow = rowKeys(keys, 2)
         assertEquals(
-            listOf("z", "x", "c", "v", "b", "n", "m"),
+            listOf("z", "x", "c", "v", "b", "n", "m", ","),
             zRow.map { it.key.label },
         )
         assertEquals(
-            "the letter row carries nothing but letters",
-            zRow.map { it.key.type }.distinct(),
-            listOf(KeyType.CHARACTER),
+            "no destructive key sits at the end of a letter row",
+            emptyList<KeyType>(),
+            zRow.map { it.key.type }.filter { it == KeyType.DELETE || it == KeyType.ENTER },
         )
 
         // And on the bottom row backspace follows the period rather than any letter.
@@ -564,7 +568,7 @@ class HexKeyboardLayoutTest {
             HexBoard.rowOffsetsInCells(portraitBoard.keys, portraitBoard.cellWidth),
             "portrait row offsets",
         )
-        assertEquals(listOf(10, 9, 7, 7), (0..3).map { row -> portraitBoard.keys.count { it.row == row } })
+        assertEquals(listOf(10, 9, 8, 7), (0..3).map { row -> portraitBoard.keys.count { it.row == row } })
 
         // Landscape is the split: two halves pinned to the two edges with the channel between them.
         // It no longer shares portrait's centring or its side bands — that is the change, and this is
@@ -583,7 +587,7 @@ class HexKeyboardLayoutTest {
             },
         )
         assertEquals(
-            listOf(5, 4, 3, 4),
+            listOf(5, 4, 4, 4),
             (0..3).map { row ->
                 landscapeBoard.keys.count { it.row == row && it.centerX > landscapeChannel.end }
             },

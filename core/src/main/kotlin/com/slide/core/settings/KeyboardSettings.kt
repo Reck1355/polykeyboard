@@ -79,7 +79,12 @@ data class KeyboardSettings(
     val languageTag: String = "",
     val showKeyBorders: Boolean = false,
     val showKeyPreview: Boolean = true,
-    val showNumberRow: Boolean = true,
+    /**
+     * Off by default: the digit row made the honeycomb's top as wide as its letter row, so the
+     * board read as a rectangle with a notch in it rather than as a board narrowing downwards. The
+     * setting is kept, because it still works and it is his to turn on.
+     */
+    val showNumberRow: Boolean = false,
     /** Multiplier on the default key height, 0.7–1.4. */
     val keyHeightScale: Float = 1f,
     /**

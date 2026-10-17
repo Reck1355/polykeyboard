@@ -264,16 +264,24 @@ object Layouts {
                 // Caps and backspace used to sit at this row's ends, which meant reaching past the
                 // letters for both of them: backspace landed beside M, one slip from the letter a
                 // thumb had just typed. They have moved to the bottom row, so the letters keep
-                // their places and the row is inset a cell at each end to hold the grid's width.
-                QwertyEn.rows[2].keys.drop(1).dropLast(1),
+                // their places. Seven letters alone would leave half a cell of slack on each side
+                // while the row above sits half a cell in, which steps a whole cell instead of half
+                // of one; the comma rides at this row's right end, so the row is eight cells, centred
+                // on the ten-cell grid. A comma is a punctuation key, not the backspace that used
+                // to sit in that corner.
+                QwertyEn.rows[2].keys.drop(1).dropLast(1) + listOf(comma.copy(widthWeight = 1f)),
                 leadingGap = 1f,
                 trailingGap = 1f,
             ),
             KeyRow(
-                // Seven one-cell keys and space, the same nine cells the row held before, so the
-                // honeycomb's grid is untouched. The globe and the emoji key have left the board
-                // for buttons on the strip above it, where neither competes with a letter row and
-                // both stay reachable from the symbol pages, which never carried them.
+                // Six one-cell keys and a three-cell space: eight cells under the seven above, so
+                // the board narrows downwards row by row — ten, nine, seven, eight — instead of
+                // widening again at the bottom, which was what made it read as unbalanced.
+                //
+                // The width for it came from the `?123` key, which is a mode rather than a letter
+                // and now sits on the strip with emoji and the language switch. The space bar keeps
+                // its three cells: the landscape split hands a straddling wide key half its cells
+                // rounded up, so three is the smallest that still gives each thumb two.
                 listOf(
                     toSymbols.copy(widthWeight = 1f),
                     shift.copy(widthWeight = 1f),
@@ -283,8 +291,11 @@ object Layouts {
                     delete.copy(widthWeight = 1f),
                     enter.copy(widthWeight = 1f),
                 ),
-                HEX_ROW_OFFSET,
-                HEX_ROW_OFFSET,
+                // Half a cell in from each edge, which is what centres nine cells on a ten-cell
+                // grid and leaves the space bar on the board's midline. Three keys to its left and
+                // three to its right, so no key sits a whole cell off where a thumb goes looking.
+                leadingGap = 0.5f,
+                trailingGap = 0.5f,
             ),
         ),
     )
@@ -311,9 +322,10 @@ object Layouts {
             ),
             KeyRow(
                 // Caps and backspace have moved to the bottom row, which Spanish shares with
-                // English, so this row is the letters alone and inset a cell at each end to keep
-                // the grid's width.
-                QwertyEs.rows[2].keys.drop(1).dropLast(1),
+                // English, so this row is the letters plus the comma English carries at its right
+                // end: eight cells, centred, and half a cell out of step with the row above. The
+                // two boards have to be the same board or a bilingual user loses one of them.
+                QwertyEs.rows[2].keys.drop(1).dropLast(1) + listOf(comma.copy(widthWeight = 1f)),
                 leadingGap = 1f,
                 trailingGap = 1f,
             ),

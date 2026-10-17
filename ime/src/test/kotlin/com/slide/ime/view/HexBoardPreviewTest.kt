@@ -3,6 +3,7 @@ package com.slide.ime.view
 import com.slide.core.layout.KeyType
 import com.slide.core.layout.KeyboardLayout
 import com.slide.core.layout.Layouts
+import com.slide.core.settings.KeyboardSettings
 import com.slide.core.theme.HexPalette
 import java.io.File
 import org.junit.Assert.assertTrue
@@ -109,7 +110,10 @@ class HexBoardPreviewTest {
      */
     private fun boardLayout(shot: Shot) = Layouts.withNumberRowForHoneycomb(
         layout = shot.layout,
-        enabled = true,
+        // Read from the settings rather than written here: the digit row is off by default now, and
+        // a preview that switched it on would picture a board he does not type on. The setting still
+        // works — it is only its default that moved.
+        enabled = KeyboardSettings().showNumberRow,
         portrait = shot.orientation == HexBoard.Orientation.PORTRAIT,
     )
 
