@@ -29,6 +29,7 @@ import com.slide.core.layout.Key
 import com.slide.core.layout.KeyType
 import com.slide.core.layout.KeyboardLayout
 import com.slide.core.layout.Layouts
+import com.slide.core.settings.boardOffsetDp
 import com.slide.core.settings.KeyboardSettings
 import com.slide.core.theme.HexPalette
 import com.slide.core.theme.KeyboardTheme
@@ -105,7 +106,8 @@ class KeyboardView @JvmOverloads constructor(
     var settings: KeyboardSettings = KeyboardSettings()
         set(value) {
             val heightChanged = field.keyHeightScale != value.keyHeightScale ||
-                field.bottomPaddingDp != value.bottomPaddingDp ||
+                field.portraitBoardOffsetDp != value.portraitBoardOffsetDp ||
+                field.landscapeBoardOffsetDp != value.landscapeBoardOffsetDp ||
                 field.showNumberRow != value.showNumberRow ||
                 // The keyboard-size ladder resizes the hex board, so a step change has to re-measure
                 // as surely as a height change: without this the new size would wait for some
@@ -474,7 +476,25 @@ class KeyboardView @JvmOverloads constructor(
      * The navigation bar is not part of this. [KeyboardFrame] reserves that below the keyboard on
      * behalf of every panel that sits over it, so it is not this view's to account for.
      */
-    private fun bottomInset(): Float = dp(settings.bottomPaddingDp)
+    private fun bottomInset(): Float = dp(maxOf(0f, boardOffsetDp()))
+
+    /**
+     * Room above the board when its placement is negative, so "lower" is a move the board can actually
+     * make. A keyboard is pinned to the bottom edge of the screen, so there is only ever space below it:
+     * floating it up is adding space there, and dropping it down is leaving the space above it instead
+     * and letting the window grow upward. Both read one signed number, which is why the control can go
+     * either way from zero without the keyboard needing two.
+     */
+    private fun topInset(): Float = dp(maxOf(0f, -boardOffsetDp()))
+
+    /**
+     * The placement that applies to the board on screen: portrait's number, or landscape's.
+     *
+     * Asked of the sizing rather than of the board being drawn, so the classic rectangular board is placed
+     * by the orientation too — it is the same question about the same screen, and a stock board that stayed
+     * put while the honeycomb moved would be the same setting meaning two things.
+     */
+    private fun boardOffsetDp(): Float = settings.boardOffsetDp(landscape = hexSizing().split)
 
     /**
      * The current display's height in pixels — the screen the keyboard is drawn on.
@@ -535,7 +555,7 @@ class KeyboardView @JvmOverloads constructor(
             // and split in landscape. The size ladder only moves the number this block comes out at:
             // a bigger step is a taller portrait block or a larger landscape share, and this is the
             // one place the keyboard's own height is measured from it.
-            val natural = topPadding + header +
+            val natural = topInset() + topPadding + header +
                 HexBoard.scaledBoardHeight(
                     HexBoard.cappedBoardHeight(
                         width.toFloat(), displayHeight(), hexSizing(), effectiveHexLayout().rows.size,
@@ -552,7 +572,7 @@ class KeyboardView @JvmOverloads constructor(
             val effective = Layouts.withNumberRow(keyboardLayout, settings.showNumberRow)
             val rowUnits = effective.rows.sumOf { it.heightWeight.toDouble() }.toFloat()
             val contentHeight = rowUnits * baseRowHeight * settings.keyHeightScale
-            topPadding + header + contentHeight + bottomInset()
+            topInset() + topPadding + header + contentHeight + bottomInset()
         }
         setMeasuredDimension(width, height.roundToInt())
     }
@@ -582,7 +602,7 @@ class KeyboardView @JvmOverloads constructor(
 
     private fun recomputeGeometry(width: Int, height: Int) {
         val header = if (searchMode) searchHeaderHeight() else 0f
-        val topOffset = topPadding + header
+        val topOffset = topInset() + topPadding + header
         val available = (height - topOffset - bottomInset()).coerceAtLeast(1f)
         val effective = Layouts.withNumberRow(keyboardLayout, settings.showNumberRow)
         placedKeys = if (effective.hexKeys) {

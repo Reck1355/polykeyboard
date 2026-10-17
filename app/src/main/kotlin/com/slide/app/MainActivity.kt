@@ -78,6 +78,7 @@ import com.slide.core.layout.Key
 import com.slide.core.layout.KeyType
 import com.slide.core.layout.KeyboardLanguages
 import com.slide.core.layout.Layouts
+import com.slide.core.settings.BOARD_OFFSET_RANGE
 import com.slide.core.settings.ClassicKeyboard
 import com.slide.core.settings.KeyboardSettings
 import com.slide.core.settings.KeyboardSize
@@ -122,6 +123,13 @@ class MainActivity : ComponentActivity() {
     }
 }
 
+/** A placement read as where the board sits, the same words the keyboard's own panel uses. */
+private fun placementLabel(dp: Float): String = when {
+    dp > 0f -> "${dp.roundToInt()} dp higher"
+    dp < 0f -> "${(-dp).roundToInt()} dp lower"
+    else -> "at the bottom"
+}
+
 @Composable
 private fun SlideAppTheme(content: @Composable () -> Unit) {
     val context = LocalContext.current
@@ -151,7 +159,12 @@ private fun SetupScreen(repository: SettingsRepository) {
     var keyboardSizeStep by remember(settings.keyboardSizeStep) {
         mutableIntStateOf(settings.keyboardSizeStep)
     }
-    var bottomPadding by remember(settings.bottomPaddingDp) { mutableFloatStateOf(settings.bottomPaddingDp) }
+    var portraitPlacement by remember(settings.portraitBoardOffsetDp) {
+        mutableFloatStateOf(settings.portraitBoardOffsetDp)
+    }
+    var landscapePlacement by remember(settings.landscapeBoardOffsetDp) {
+        mutableFloatStateOf(settings.landscapeBoardOffsetDp)
+    }
     var hapticStrength by remember(settings.hapticStrength) { mutableFloatStateOf(settings.hapticStrength) }
     var soundVolume by remember(settings.soundVolume) { mutableFloatStateOf(settings.soundVolume) }
     // The palette every preview on this screen draws with, resolved once from the one stored colour
@@ -530,15 +543,28 @@ private fun SetupScreen(repository: SettingsRepository) {
                         },
                     )
                     SettingSlider(
-                        label = "Space below keys",
-                        value = bottomPadding,
-                        valueLabel = "${bottomPadding.roundToInt()} dp",
-                        valueRange = 0f..32f,
+                        label = "Portrait placement",
+                        value = portraitPlacement,
+                        valueLabel = placementLabel(portraitPlacement),
+                        valueRange = BOARD_OFFSET_RANGE,
                         steps = 7,
-                        onValueChange = { bottomPadding = it },
+                        onValueChange = { portraitPlacement = it },
                         onValueChangeFinished = {
                             scope.launch {
-                                repository.update { it.copy(bottomPaddingDp = bottomPadding) }
+                                repository.update { it.copy(portraitBoardOffsetDp = portraitPlacement) }
+                            }
+                        },
+                    )
+                    SettingSlider(
+                        label = "Landscape placement",
+                        value = landscapePlacement,
+                        valueLabel = placementLabel(landscapePlacement),
+                        valueRange = BOARD_OFFSET_RANGE,
+                        steps = 7,
+                        onValueChange = { landscapePlacement = it },
+                        onValueChangeFinished = {
+                            scope.launch {
+                                repository.update { it.copy(landscapeBoardOffsetDp = landscapePlacement) }
                             }
                         },
                     )

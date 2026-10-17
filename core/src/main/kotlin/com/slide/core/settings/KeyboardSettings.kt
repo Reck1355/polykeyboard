@@ -93,8 +93,19 @@ data class KeyboardSettings(
      * back to the ladder instead of quietly resizing the board to something nobody chose.
      */
     val keyboardSizeStep: Int = KeyboardSize.DEFAULT_STEP,
-    /** Extra space below the keyboard in dp, for gesture-nav comfort. */
-    val bottomPaddingDp: Float = 0f,
+    /**
+     * Where the portrait board sits, in dp. Positive floats it up off the bottom edge; negative drops it
+     * below where it would otherwise sit, by leaving the room above it instead.
+     *
+     * Separate from portrait's twin because the two boards are different keyboards on a different axis:
+     * portrait is a tall single board reaching down to the bottom edge, landscape is a flat split that a
+     * thumb rests on from the side, and one number for both means changing one to fix the other. Zero is
+     * the bottom edge, which is where a keyboard is expected to be, so neither orientation moves until it
+     * is asked to.
+     */
+    val portraitBoardOffsetDp: Float = 0f,
+    /** Where the landscape board sits, in dp. Same axis and same zero as [portraitBoardOffsetDp]. */
+    val landscapeBoardOffsetDp: Float = 0f,
     val hapticEnabled: Boolean = true,
     /** 0–1, scaled to a vibration amplitude. */
     val hapticStrength: Float = 0.5f,
@@ -282,7 +293,11 @@ private val LEGACY_SETTINGS_MIGRATION_COMPLETE =
 /** Preferences keys are name-based, so validate the erased value before copying the legacy key. */
 internal fun isBackupEligibleSetting(name: String, value: Any): Boolean = when (name) {
     "theme_id", "voice_model", "colour_preset_id", "language_tag" -> value is String
-    "key_height_scale", "bottom_padding_dp", "haptic_strength", "sound_volume" -> value is Float
+    "key_height_scale", "haptic_strength", "sound_volume" -> value is Float
+    "portrait_board_offset_dp", "landscape_board_offset_dp" -> value is Float
+    // Still eligible although nothing writes it: an installed copy holds it, and a restore from an older
+    // backup has to bring it back for `boardOffset` to seed both orientations from it.
+    "bottom_padding_dp" -> value is Float
     "colour_seed_hue", "colour_seed_saturation", "colour_seed_lightness" -> value is Float
     "learned_data_clear_epoch" -> value is Long
     "emoji_skin_tone", "keyboard_size_step" -> value is Int
@@ -604,6 +619,10 @@ private object Keys {
     val NUMBER_ROW = booleanPreferencesKey("number_row")
     val KEY_HEIGHT = floatPreferencesKey("key_height_scale")
     val KEYBOARD_SIZE_STEP = intPreferencesKey("keyboard_size_step")
+    val PORTRAIT_BOARD_OFFSET = floatPreferencesKey("portrait_board_offset_dp")
+    val LANDSCAPE_BOARD_OFFSET = floatPreferencesKey("landscape_board_offset_dp")
+
+    /** What "space below the keys" was before it became per-orientation; read once, to seed both. */
     val BOTTOM_PADDING = floatPreferencesKey("bottom_padding_dp")
     val HAPTIC = booleanPreferencesKey("haptic_enabled")
     val HAPTIC_STRENGTH = floatPreferencesKey("haptic_strength")
@@ -624,6 +643,24 @@ private object Keys {
     val RECENT_EMOJI = stringPreferencesKey("recent_emoji")
 }
 
+/**
+ * The travel a board's placement control offers, in dp: 64 up or 64 down from the bottom edge.
+ *
+ * One range for both orientations and for both surfaces that draw it. Two surfaces with two ranges is how
+ * a control stops meaning what the keyboard does.
+ */
+val BOARD_OFFSET_RANGE = -64f..64f
+
+/**
+ * The placement in force for a board on a landscape screen, or on a portrait one.
+ *
+ * The orientation picks which of the two numbers applies, and it is picked in one place so the keyboard
+ * cannot be reading one while the settings panel is describing the other. Which board is drawn does not
+ * come into it: the same screen gets the same answer whichever keyboard is on it.
+ */
+fun KeyboardSettings.boardOffsetDp(landscape: Boolean): Float =
+    if (landscape) landscapeBoardOffsetDp else portraitBoardOffsetDp
+
 internal fun MutablePreferences.writeKeyboardSettings(updated: KeyboardSettings) {
     this[Keys.THEME_ID] = updated.themeId
     this[Keys.COLOUR_PRESET_ID] = updated.colourPresetId
@@ -637,7 +674,8 @@ internal fun MutablePreferences.writeKeyboardSettings(updated: KeyboardSettings)
     this[Keys.NUMBER_ROW] = updated.showNumberRow
     this[Keys.KEY_HEIGHT] = updated.keyHeightScale
     this[Keys.KEYBOARD_SIZE_STEP] = updated.keyboardSizeStep
-    this[Keys.BOTTOM_PADDING] = updated.bottomPaddingDp
+    this[Keys.PORTRAIT_BOARD_OFFSET] = updated.portraitBoardOffsetDp
+    this[Keys.LANDSCAPE_BOARD_OFFSET] = updated.landscapeBoardOffsetDp
     this[Keys.HAPTIC] = updated.hapticEnabled
     this[Keys.HAPTIC_STRENGTH] = updated.hapticStrength
     this[Keys.SOUND] = updated.soundEnabled
@@ -671,7 +709,10 @@ internal fun Preferences.toKeyboardSettings(): KeyboardSettings {
         showNumberRow = this[Keys.NUMBER_ROW] ?: defaults.showNumberRow,
         keyHeightScale = boundedFloat(Keys.KEY_HEIGHT, defaults.keyHeightScale, 0.7f..1.4f),
         keyboardSizeStep = boundedInt(Keys.KEYBOARD_SIZE_STEP, defaults.keyboardSizeStep, KeyboardSize.STEPS),
-        bottomPaddingDp = boundedFloat(Keys.BOTTOM_PADDING, defaults.bottomPaddingDp, 0f..32f),
+        // An install from before the split has one number and no orientation; it seeds both, so the
+        // space that was chosen for gesture-nav comfort is not silently thrown away on the update.
+        portraitBoardOffsetDp = boardOffset(Keys.PORTRAIT_BOARD_OFFSET),
+        landscapeBoardOffsetDp = boardOffset(Keys.LANDSCAPE_BOARD_OFFSET),
         hapticEnabled = this[Keys.HAPTIC] ?: defaults.hapticEnabled,
         hapticStrength = boundedFloat(Keys.HAPTIC_STRENGTH, defaults.hapticStrength, 0f..1f),
         soundEnabled = this[Keys.SOUND] ?: defaults.soundEnabled,
@@ -693,6 +734,19 @@ internal fun Preferences.toKeyboardSettings(): KeyboardSettings {
 }
 
 /** Protobuf accepts NaN/infinity as floats, but layout and slider rounding cannot use them. */
+/**
+ * One board's placement: its own stored value, or the single "space below the keys" number that used to
+ * serve both orientations, so an update does not throw away the space that was chosen for gesture-nav
+ * comfort. Absent on both counts means zero, which is the bottom edge.
+ */
+private fun Preferences.boardOffset(key: Preferences.Key<Float>): Float {
+    // Through boundedFloat on both counts. A stored value only reaches a keyboard after being checked for
+    // finiteness and range, and the value being carried over from before the split is stored too — reading
+    // it raw would let a corrupt one put a NaN straight into the board's geometry.
+    val carried = boundedFloat(Keys.BOTTOM_PADDING, 0f, BOARD_OFFSET_RANGE)
+    return boundedFloat(key, carried, BOARD_OFFSET_RANGE)
+}
+
 private fun Preferences.boundedFloat(
     key: Preferences.Key<Float>,
     fallback: Float,

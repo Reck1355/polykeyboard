@@ -1,5 +1,6 @@
 package com.slide.ime.view
 
+import com.slide.core.settings.BOARD_OFFSET_RANGE
 import android.content.Context
 import android.content.res.ColorStateList
 import android.graphics.Canvas
@@ -145,14 +146,6 @@ class KeyboardSettingsPanelView(context: Context) : LinearLayout(context) {
         }
 
         addSection(body, "Appearance and feedback")
-        addSlider(
-            body,
-            "Space below keys",
-            valueRange = 0f..32f,
-            steps = 7,
-            read = { it.bottomPaddingDp },
-            formatValue = { "${it.toInt()} dp" },
-        ) { value, chosen -> value.copy(bottomPaddingDp = chosen) }
         addToggle(body, "Key borders", read = { it.showKeyBorders }) { value, checked ->
             value.copy(showKeyBorders = checked)
         }
@@ -204,6 +197,29 @@ class KeyboardSettingsPanelView(context: Context) : LinearLayout(context) {
             read = { it.keyHeightScale },
             formatValue = { "${(it * 100).toInt()}%" },
         ) { value, chosen -> value.copy(keyHeightScale = chosen) }
+
+        addNote(
+            body,
+            "Placement moves the board without resizing it: higher leaves room under it, lower leaves room " +
+                "over it and the keyboard grows upward to keep the board off the bottom edge. Portrait and " +
+                "landscape keep their own, so tuning one never disturbs the other.",
+        )
+        addSlider(
+            body,
+            "Portrait placement",
+            valueRange = BOARD_OFFSET_RANGE,
+            steps = 7,
+            read = { it.portraitBoardOffsetDp },
+            formatValue = ::placementLabel,
+        ) { value, chosen -> value.copy(portraitBoardOffsetDp = chosen) }
+        addSlider(
+            body,
+            "Landscape placement",
+            valueRange = BOARD_OFFSET_RANGE,
+            steps = 7,
+            read = { it.landscapeBoardOffsetDp },
+            formatValue = ::placementLabel,
+        ) { value, chosen -> value.copy(landscapeBoardOffsetDp = chosen) }
 
         addSection(body, "Privacy")
         addToggle(
@@ -390,6 +406,13 @@ class KeyboardSettingsPanelView(context: Context) : LinearLayout(context) {
      * tracks the thumb live, and the changed setting is published once the gesture settles so
      * the keyboard is not re-laid-out on every pixel of movement.
      */
+    /** A placement read as where the board sits, because that is the thing the hand and eye judge. */
+    private fun placementLabel(dp: Float): String = when {
+        dp > 0f -> "${dp.toInt()} dp higher"
+        dp < 0f -> "${(-dp).toInt()} dp lower"
+        else -> "at the bottom"
+    }
+
     private fun addSlider(
         parent: LinearLayout,
         title: String,

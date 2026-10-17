@@ -358,23 +358,29 @@ class KeyboardSettingsTest {
     fun `stored numbers stay within keyboard and feedback limits`() {
         val tooLow = mutablePreferencesOf(
             floatPreferencesKey("key_height_scale") to -1f,
+            floatPreferencesKey("portrait_board_offset_dp") to -100f,
             floatPreferencesKey("bottom_padding_dp") to -10f,
             floatPreferencesKey("haptic_strength") to -1f,
             floatPreferencesKey("sound_volume") to -1f,
         ).toKeyboardSettings()
         assertEquals(0.7f, tooLow.keyHeightScale, 0f)
-        assertEquals(0f, tooLow.bottomPaddingDp, 0f)
+        assertEquals(-64f, tooLow.portraitBoardOffsetDp, 0f)
+        // Nothing has been set for landscape, so it takes the single value this install was carrying —
+        // and -10 is inside the range, so it arrives as itself rather than clamped to the floor.
+        assertEquals(-10f, tooLow.landscapeBoardOffsetDp, 0f)
         assertEquals(0f, tooLow.hapticStrength, 0f)
         assertEquals(0f, tooLow.soundVolume, 0f)
 
         val tooHigh = mutablePreferencesOf(
             floatPreferencesKey("key_height_scale") to Float.MAX_VALUE,
-            floatPreferencesKey("bottom_padding_dp") to Float.MAX_VALUE,
+            floatPreferencesKey("portrait_board_offset_dp") to Float.MAX_VALUE,
+            floatPreferencesKey("landscape_board_offset_dp") to Float.MAX_VALUE,
             floatPreferencesKey("haptic_strength") to Float.MAX_VALUE,
             floatPreferencesKey("sound_volume") to Float.MAX_VALUE,
         ).toKeyboardSettings()
         assertEquals(1.4f, tooHigh.keyHeightScale, 0f)
-        assertEquals(32f, tooHigh.bottomPaddingDp, 0f)
+        assertEquals(64f, tooHigh.portraitBoardOffsetDp, 0f)
+        assertEquals(64f, tooHigh.landscapeBoardOffsetDp, 0f)
         assertEquals(1f, tooHigh.hapticStrength, 0f)
         assertEquals(1f, tooHigh.soundVolume, 0f)
     }
@@ -416,7 +422,8 @@ class KeyboardSettingsTest {
             showKeyPreview = false,
             showNumberRow = false,
             keyHeightScale = 1.3f,
-            bottomPaddingDp = 24f,
+            portraitBoardOffsetDp = 24f,
+            landscapeBoardOffsetDp = -32f,
             hapticEnabled = false,
             hapticStrength = 0.9f,
             soundEnabled = true,
@@ -469,4 +476,32 @@ class KeyboardSettingsTest {
     }
 
     // endregion
+
+    @Test
+    fun `the two placements are separate, and the one before them seeds both`() {
+        // Written and read back independently: tuning one orientation must not move the other.
+        val written = mutablePreferencesOf().apply {
+            writeKeyboardSettings(KeyboardSettings().copy(portraitBoardOffsetDp = 40f, landscapeBoardOffsetDp = -24f))
+        }
+        val read = written.toKeyboardSettings()
+        assertEquals(40f, read.portraitBoardOffsetDp, 0f)
+        assertEquals(-24f, read.landscapeBoardOffsetDp, 0f)
+        assertEquals("the orientation picks the number", 40f, read.boardOffsetDp(landscape = false), 0f)
+        assertEquals(-24f, read.boardOffsetDp(landscape = true), 0f)
+
+        // An install from before the split: one number, no orientation. It seeds both rather than being
+        // dropped, because the space under the keys was chosen for the hand.
+        // The stored names are spelled out: they are what an installed copy already holds, and a rename
+        // here is a migration that silently stops working.
+        val wasSingle = floatPreferencesKey("bottom_padding_dp")
+        val wasPortrait = floatPreferencesKey("portrait_board_offset_dp")
+        val older = mutablePreferencesOf(wasSingle to 24f).toKeyboardSettings()
+        assertEquals(24f, older.portraitBoardOffsetDp, 0f)
+        assertEquals(24f, older.landscapeBoardOffsetDp, 0f)
+
+        // And once the split has been used, the old value stops speaking for either of them.
+        val both = mutablePreferencesOf(wasSingle to 24f, wasPortrait to 8f).toKeyboardSettings()
+        assertEquals(8f, both.portraitBoardOffsetDp, 0f)
+        assertEquals(24f, both.landscapeBoardOffsetDp, 0f)
+    }
 }
