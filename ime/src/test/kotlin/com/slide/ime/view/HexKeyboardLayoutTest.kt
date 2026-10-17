@@ -82,10 +82,36 @@ class HexKeyboardLayoutTest {
         HexBoard.capHeight(HexBoard.cellHeight(cellWidth, sizing)) / cellWidth
 
     @Test
-    fun `the board is four rows of ten, nine, nine, seven keys`() {
+    fun `the board is four rows, and every row spans the same width`() {
         val keys = placed()
         assertEquals(4, keys.maxOf { it.row } + 1)
-        assertEquals(listOf(10, 9, 9, 7), (0..3).map { rowKeys(keys, it).size })
+
+        // The z-row gave up a key at each end when caps and backspace moved to the bottom row, and
+        // the bottom row took both on. What must not move is the width: a row one cell narrow or
+        // wide would scale the whole honeycomb to fit it, so the cells each row covers is the
+        // property, not the number of keys in it.
+        assertEquals(listOf(10, 9, 7, 7), (0..3).map { rowKeys(keys, it).size })
+
+        // Both insets pinned to numbers, not inferred from what is left over: an assertion that
+        // derives its expected value from the placed keys passes whatever the row does, which is
+        // how the first version of this test survived the insets being deleted.
+        val insets = listOf(0f, 0.5f, 1f, 0.5f)
+        for (row in 0..3) {
+            val inRow = rowKeys(keys, row)
+            val cells = inRow.sumOf { it.key.widthWeight.toDouble() }.toFloat()
+            assertEquals(
+                "row $row leading inset",
+                insets[row] * cellWidth,
+                inRow.first().left,
+                cellWidth * 0.01f,
+            )
+            assertEquals(
+                "row $row trailing inset",
+                (10f - insets[row] - cells) * cellWidth,
+                boardWidth - inRow.last().right,
+                cellWidth * 0.01f,
+            )
+        }
     }
 
     @Test
@@ -96,7 +122,10 @@ class HexKeyboardLayoutTest {
         assertEquals(4, offsets.size)
         assertEquals(0f, offsets[0], 0.0001f)
         assertEquals(0.5f, offsets[1], 0.0001f)
-        assertEquals(0f, offsets[2], 0.0001f)
+        // The z-row is inset a cell since caps and backspace moved to the bottom row. Half a
+        // cell from its neighbours either way, which is the honeycomb; a whole cell, so the phase
+        // it draws at is the one it drew at before.
+        assertEquals(1f, offsets[2], 0.0001f)
         assertEquals(0.5f, offsets[3], 0.0001f)
 
         // The honeycomb itself: every adjacent pair steps by exactly half a cell, and none of them
@@ -115,7 +144,7 @@ class HexKeyboardLayoutTest {
         for ((name, sizing) in listOf("portrait" to portrait, "landscape" to landscape)) {
             val board = placement(sizing = sizing)
             val offsets = HexBoard.rowOffsetsInCells(board.keys, board.cellWidth)
-            assertCells(listOf(0f, 0.5f, 0f, 0.5f), offsets, "$name: row offsets")
+            assertCells(listOf(0f, 0.5f, 1f, 0.5f), offsets, "$name: row offsets")
             assertCells(
                 listOf(0.5f, 0.5f, 0.5f),
                 HexBoard.adjacentStaggerStepsInCells(board.keys, board.cellWidth),
@@ -154,17 +183,17 @@ class HexKeyboardLayoutTest {
     }
 
     @Test
-    fun `the bottom row is globe, 123, comma, space, period, emoji, enter`() {
+    fun `the bottom row is 123, caps, comma, space, period, backspace, enter`() {
         val bottom = rowKeys(placed(), 3)
 
         assertEquals(
             listOf(
-                KeyType.LANGUAGE,
                 KeyType.SYMBOLS,
+                KeyType.SHIFT,
                 KeyType.CHARACTER,
                 KeyType.SPACE,
                 KeyType.CHARACTER,
-                KeyType.EMOJI,
+                KeyType.DELETE,
                 KeyType.ENTER,
             ),
             bottom.map { it.key.type },
@@ -174,6 +203,58 @@ class HexKeyboardLayoutTest {
         // One cell margins: the row is inset half a key at each end, like the a-row above it.
         assertEquals(0.5f * cellWidth, bottom.first().left, 0.01f)
         assertEquals(0.5f * cellWidth, boardWidth - bottom.last().right, 0.01f)
+    }
+
+    @Test
+    fun `backspace is not beside a letter, and caps is not past one`() {
+        val keys = placed()
+
+        // Backspace sat at the end of the z-row, one slip from the M a thumb had just pressed, and
+        // caps at the other end, past the Z. Neither is on a letter row now.
+        val zRow = rowKeys(keys, 2)
+        assertEquals(
+            listOf("z", "x", "c", "v", "b", "n", "m"),
+            zRow.map { it.key.label },
+        )
+        assertEquals(
+            "the letter row carries nothing but letters",
+            zRow.map { it.key.type }.distinct(),
+            listOf(KeyType.CHARACTER),
+        )
+
+        // And on the bottom row backspace follows the period rather than any letter.
+        val bottom = rowKeys(keys, 3)
+        assertEquals(KeyType.DELETE, bottom[5].key.type)
+        assertEquals(".", bottom[4].key.label)
+    }
+
+    @Test
+    fun `caps sits where the number key was, and the number key is to its left`() {
+        val bottom = rowKeys(placed(), 3)
+
+        // He asked for the caps key in the number key's place and the number key left of it, which
+        // is where the globe used to be. The two cells they hold have not moved, only their keys.
+        assertEquals(KeyType.SYMBOLS, bottom[0].key.type)
+        assertEquals("?123", bottom[0].key.label)
+        assertEquals(KeyType.SHIFT, bottom[1].key.type)
+    }
+
+    @Test
+    fun `no board carries the globe or the emoji key - the strip does`() {
+        val boards = listOf(
+            Layouts.HexQwertyEn,
+            Layouts.HexQwertyEs,
+            Layouts.HexSymbolsEn,
+            Layouts.HexSymbolsAltEn,
+        )
+        for (board in boards) {
+            val types = board.rows.flatMap { row -> row.keys.map { it.type } }
+            assertEquals(
+                "board ${board.id} still carries a strip button",
+                emptyList<KeyType>(),
+                types.filter { it == KeyType.LANGUAGE || it == KeyType.EMOJI },
+            )
+        }
     }
 
     @Test
@@ -362,7 +443,7 @@ class HexKeyboardLayoutTest {
         // still read 0 / 0.5 / 0 / 0.5 — the honeycomb invariant survives the split.
         for ((name, board) in listOf("portrait" to portraitBoard, "landscape" to landscapeBoard)) {
             assertCells(
-                listOf(0f, 0.5f, 0f, 0.5f),
+                listOf(0f, 0.5f, 1f, 0.5f),
                 HexBoard.rowOffsetsInCells(board.keys, board.cellWidth),
                 "$name row offsets",
             )
@@ -479,30 +560,30 @@ class HexKeyboardLayoutTest {
         // Portrait keeps every promise of a single board — sized to fit, centred, no side margin.
         assertFitsCentredAndInside("portrait", portraitBoard, 1080f, HexBoard.boardHeight(1080f, portrait))
         assertCells(
-            listOf(0f, 0.5f, 0f, 0.5f),
+            listOf(0f, 0.5f, 1f, 0.5f),
             HexBoard.rowOffsetsInCells(portraitBoard.keys, portraitBoard.cellWidth),
             "portrait row offsets",
         )
-        assertEquals(listOf(10, 9, 9, 7), (0..3).map { row -> portraitBoard.keys.count { it.row == row } })
+        assertEquals(listOf(10, 9, 7, 7), (0..3).map { row -> portraitBoard.keys.count { it.row == row } })
 
         // Landscape is the split: two halves pinned to the two edges with the channel between them.
         // It no longer shares portrait's centring or its side bands — that is the change, and this is
         // where the old shared assertions are rewritten to the two orientations' own promises.
         assertSplitFitsBothEdges("landscape", landscapeBoard, 2400f, landscapeAvailable)
         assertCells(
-            listOf(0f, 0.5f, 0f, 0.5f),
+            listOf(0f, 0.5f, 1f, 0.5f),
             HexBoard.rowOffsetsInCells(landscapeBoard.keys, landscapeBoard.cellWidth),
             "landscape row offsets",
         )
         val landscapeChannel = landscapeBoard.channel!!
         assertEquals(
-            listOf(5, 5, 5, 4),
+            listOf(5, 5, 4, 4),
             (0..3).map { row ->
                 landscapeBoard.keys.count { it.row == row && it.centerX < landscapeChannel.start }
             },
         )
         assertEquals(
-            listOf(5, 4, 4, 4),
+            listOf(5, 4, 3, 4),
             (0..3).map { row ->
                 landscapeBoard.keys.count { it.row == row && it.centerX > landscapeChannel.end }
             },

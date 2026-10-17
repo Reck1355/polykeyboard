@@ -72,8 +72,10 @@ class SpanishLayoutTest {
                 assertNull("row $row ${key.label}", key.hint)
             }
         }
+        // The hex z-row is the classic row's letters, neither of its outer keys: caps and
+        // backspace are on the bottom row now, on both boards.
         assertEquals(
-            Layouts.QwertyEn.rows[2].keys.map { it.hint },
+            Layouts.QwertyEn.rows[2].keys.drop(1).dropLast(1).map { it.hint },
             Layouts.HexQwertyEn.rows[2].keys.map { it.hint },
         )
     }

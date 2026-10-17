@@ -15,9 +15,11 @@ import org.junit.Test
  * These boards put the delimiter on the honeycomb's own bottom row instead. Two things are pinned
  * here, and the first is the one that fixes the report: **every board the table hands out for a
  * text-ish mode is a hex board**, so the mode a field asks for can no longer change the keyboard's
- * shape. The second is the shape itself: four rows of 10 / 9 / 9 / 7 keys with the same half-cell
- * stagger, one three-cell space bar, and one cell per key otherwise, which is the ten-column board
- * the size ladder and the landscape split are all measured against.
+ * shape. The second is the shape itself: four rows of 10 / 9 / 7 / 6 keys with the same half-cell
+ * stagger, a space bar, and one cell per key otherwise, which is the ten-column board the size
+ * ladder and the landscape split are all measured against. The cells each row covers are what those
+ * two are measured against and those are unchanged: caps and backspace took the cells the z-row's
+ * ends gave up, and space took the two the globe and the emoji key left behind.
  */
 class HexAddressLayoutTest {
 
@@ -51,14 +53,16 @@ class HexAddressLayoutTest {
     fun `each address board is the same honeycomb with a delimiter in it`() {
         for (board in englishAddress + spanishAddress) {
             val counts = board.rows.map { it.keys.size }
-            assertEquals("${board.id}: four rows of 10 / 9 / 9 / 7", listOf(10, 9, 9, 7), counts)
+            assertEquals("${board.id}: four rows of 10 / 9 / 7 / 6", listOf(10, 9, 7, 6), counts)
             // The board as authored is four rows. A digit row is added on top by the setting, not baked
             // in, and these boards now accept one: a number row over an email address is worth having, and
             // the honeycomb's own row is what arrives.
             assertTrue("${board.id}: accepts a digit row", board.supportsNumberRow)
             val spaces = board.rows.flatMap { it.keys }.filter { it.type == KeyType.SPACE }
             assertEquals("${board.id}: one space bar", 1, spaces.size)
-            assertEquals("${board.id}: over three cells", 3f, spaces.single().widthWeight, 0f)
+            // Four, not three: the row still covers nine cells with the globe and the emoji key
+            // gone, and the space bar is where the slack went.
+            assertEquals("${board.id}: over four cells", 4f, spaces.single().widthWeight, 0f)
             assertEquals("${board.id}: every key but space is one cell",
                 1f, board.rows.flatMap { it.keys }.filter { it.type != KeyType.SPACE }
                     .maxOf { it.widthWeight }, 0f)
@@ -86,9 +90,12 @@ class HexAddressLayoutTest {
                 "${board.id} keeps the way into the symbols page",
                 board.rows.last().keys.any { it.type == KeyType.SYMBOLS },
             )
-            assertTrue(
-                "${board.id} keeps the globe",
-                board.rows.last().keys.any { it.type == KeyType.LANGUAGE },
+            // Not on the board any more. The globe and the emoji key are buttons on the strip
+            // above it, which is the one place they are reachable from every page.
+            assertFalse(
+                "${board.id} still carries a strip button",
+                board.rows.flatMap { it.keys }
+                    .any { it.type == KeyType.LANGUAGE || it.type == KeyType.EMOJI },
             )
         }
     }

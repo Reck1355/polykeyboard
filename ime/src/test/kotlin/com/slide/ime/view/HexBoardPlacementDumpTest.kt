@@ -199,7 +199,7 @@ class HexBoardPlacementDumpTest {
         assertEquals("portrait symbols: four rows", 4, upright.keys.map { it.row }.distinct().size)
         assertNull("portrait symbols: one board, no channel", upright.channel)
         assertEquals(
-            "portrait symbols: one space key, over three cells",
+            "portrait symbols: one space key, over five cells",
             1,
             upright.keys.count { it.key.type == KeyType.SPACE },
         )
@@ -212,10 +212,10 @@ class HexBoardPlacementDumpTest {
         )
         assertNotNull("landscape symbols: the halves are held apart", wide.channel)
         assertTrue(
-            "landscape symbols: every key is one cell, except the space, which is two",
+            "landscape symbols: every key is one cell, except the space, which is three",
             wide.keys.all {
                 it.width <= wide.cellWidth + 0.01f ||
-                    (it.key.type == KeyType.SPACE && it.width <= 2f * wide.cellWidth + 0.01f)
+                    (it.key.type == KeyType.SPACE && it.width <= 3f * wide.cellWidth + 0.01f)
             },
         )
     }

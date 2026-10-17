@@ -53,6 +53,12 @@ class SuggestionStripView(context: Context) : View(context) {
 
         /** The microphone button was tapped. */
         fun onVoiceRequested()
+
+        /** The emoji button above the board was tapped. */
+        fun onEmojiRequested() = Unit
+
+        /** The language button above the board was tapped. */
+        fun onLanguageRequested() = Unit
     }
 
     var listener: Listener? = null
@@ -67,6 +73,8 @@ class SuggestionStripView(context: Context) : View(context) {
             settingsPressed = false
             clipboardPressed = false
             editPressed = false
+            emojiPressed = false
+            languagePressed = false
             refreshAccessibilityDescription()
             invalidate()
         }
@@ -111,6 +119,18 @@ class SuggestionStripView(context: Context) : View(context) {
     private var settingsPressed = false
     private var clipboardPressed = false
     private var editPressed = false
+
+    /**
+     * The two buttons the boards gave up.
+     *
+     * The emoji key and the globe used to sit in the bottom key row, where the globe took the
+     * leftmost cell and the emoji key sat beside the period. Both have left the board for here, and
+     * unlike the clipboard and editing shortcuts they are not offered only while the strip is
+     * empty: they are the keyboard's only route to emoji and to another language, so they are on
+     * the strip in every state.
+     */
+    private var emojiPressed = false
+    private var languagePressed = false
     private var emptyMessage = "Type or swipe for suggestions"
 
     private val handler = Handler(Looper.getMainLooper())
@@ -141,6 +161,8 @@ class SuggestionStripView(context: Context) : View(context) {
             if (isOverClipboard(x)) return A11Y_CLIPBOARD
             if (isOverEdit(x)) return A11Y_EDIT
             if (voiceEnabled && isOverMic(x)) return A11Y_MIC
+            if (isOverEmoji(x)) return A11Y_EMOJI
+            if (isOverLanguage(x)) return A11Y_LANGUAGE
             val index = indexAt(x)
             return if (index >= 0) A11Y_WORD_BASE + index else INVALID_ID
         }
@@ -153,6 +175,8 @@ class SuggestionStripView(context: Context) : View(context) {
             }
             words.indices.forEach { virtualViewIds += A11Y_WORD_BASE + it }
             if (voiceEnabled) virtualViewIds += A11Y_MIC
+            virtualViewIds += A11Y_EMOJI
+            virtualViewIds += A11Y_LANGUAGE
         }
 
         override fun onPopulateNodeForVirtualView(
@@ -184,6 +208,30 @@ class SuggestionStripView(context: Context) : View(context) {
             if (virtualViewId == A11Y_MIC) {
                 node.contentDescription = "Voice typing"
                 node.setBoundsInParent(Rect((width - micWidth()).toInt(), 0, width, height))
+                return
+            }
+            if (virtualViewId == A11Y_EMOJI) {
+                node.contentDescription = "Emoji"
+                node.setBoundsInParent(
+                    Rect(
+                        squareLeft(1 + micSquares()).toInt(),
+                        0,
+                        squareRight(1 + micSquares()).toInt(),
+                        height,
+                    ),
+                )
+                return
+            }
+            if (virtualViewId == A11Y_LANGUAGE) {
+                node.contentDescription = "Next language"
+                node.setBoundsInParent(
+                    Rect(
+                        squareLeft(2 + micSquares()).toInt(),
+                        0,
+                        squareRight(2 + micSquares()).toInt(),
+                        height,
+                    ),
+                )
                 return
             }
 
@@ -236,6 +284,16 @@ class SuggestionStripView(context: Context) : View(context) {
             if (virtualViewId == A11Y_MIC) {
                 if (action != AccessibilityNodeInfo.ACTION_CLICK || !voiceEnabled) return false
                 listener?.onVoiceRequested()
+                return true
+            }
+            if (virtualViewId == A11Y_EMOJI) {
+                if (action != AccessibilityNodeInfo.ACTION_CLICK) return false
+                listener?.onEmojiRequested()
+                return true
+            }
+            if (virtualViewId == A11Y_LANGUAGE) {
+                if (action != AccessibilityNodeInfo.ACTION_CLICK) return false
+                listener?.onLanguageRequested()
                 return true
             }
             val index = virtualViewId - A11Y_WORD_BASE
@@ -325,18 +383,20 @@ class SuggestionStripView(context: Context) : View(context) {
         canvas.drawColor(keyboardTheme.background)
         drawSettingsButton(canvas)
         drawMicButton(canvas)
+        drawEmojiButton(canvas)
+        drawLanguageButton(canvas)
         if (words.isEmpty()) {
-            drawToolbarButton(canvas, slot = 1, pressed = clipboardPressed) { x, y ->
+            drawToolbarButton(canvas, settingsWidth() * 1.5f, pressed = clipboardPressed) { x, y ->
                 drawClipboardGlyph(canvas, x, y)
             }
-            drawToolbarButton(canvas, slot = 2, pressed = editPressed) { x, y ->
+            drawToolbarButton(canvas, settingsWidth() * 2.5f, pressed = editPressed) { x, y ->
                 drawEditGlyph(canvas, x, y)
             }
             if (emptyMessage.isNotEmpty()) {
                 // The hint shares the row with the toolbar icons, so it centres over what is
                 // left of the strip and disappears rather than colliding on a narrow screen.
                 val messageLeft = settingsWidth() * 3
-                val messageRight = if (voiceEnabled) width - micWidth() else width.toFloat()
+                val messageRight = squareLeft(trailingSquares())
                 val messageWidth = messageRight - messageLeft
                 if (messageWidth >= dp(72f)) {
                     textPaint.color = keyboardTheme.hintText
@@ -469,11 +529,10 @@ class SuggestionStripView(context: Context) : View(context) {
     /** Shared chrome for the empty-strip toolbar buttons: circle, pressed overlay, then glyph. */
     private inline fun drawToolbarButton(
         canvas: Canvas,
-        slot: Int,
+        centerX: Float,
         pressed: Boolean,
         glyph: (centerX: Float, centerY: Float) -> Unit,
     ) {
-        val centerX = settingsWidth() * slot + settingsWidth() / 2f
         val centerY = height / 2f
         pressedPaint.color = keyboardTheme.specialKeyBackground
         canvas.drawCircle(centerX, centerY, height * 0.36f, pressedPaint)
@@ -525,6 +584,26 @@ class SuggestionStripView(context: Context) : View(context) {
     }
 
     /**
+     * The emoji button, where the board's own emoji key used to reach.
+     *
+     * It sits one square in from the microphone, or at the edge itself while voice is off, so the
+     * right end of the strip reads the same way it did when these were keys: language further in,
+     * emoji nearer the thumb.
+     */
+    private fun drawEmojiButton(canvas: Canvas) {
+        drawToolbarButton(canvas, centerX = squareLeft(1 + micSquares()) + height / 2f, pressed = emojiPressed) { x, y ->
+            EmojiGlyph.draw(canvas, iconPaint, x, y, height * 0.25f)
+        }
+    }
+
+    /** The language switch, on the strip because the board no longer carries a globe. */
+    private fun drawLanguageButton(canvas: Canvas) {
+        drawToolbarButton(canvas, centerX = squareLeft(2 + micSquares()) + height / 2f, pressed = languagePressed) { x, y ->
+            GlobeGlyph.draw(canvas, iconPaint, x, y, height * 0.25f)
+        }
+    }
+
+    /**
      * The microphone lives here rather than in the bottom key row, as in Gboard.
      *
      * The alternative is taking width from the space bar, which is the most-hit key on the
@@ -552,12 +631,34 @@ class SuggestionStripView(context: Context) : View(context) {
     /** Width reserved for the microphone button at the right edge. */
     private fun micWidth(): Float = height.toFloat()
 
+    /** Whether the microphone's square is on the strip at all. */
+    private fun micSquares(): Int = if (voiceEnabled) 1 else 0
+
+    /**
+     * Squares reserved after the candidates: the emoji and language buttons always, and the
+     * microphone's while voice is on.
+     *
+     * The candidate window and every hit test read this one number, so a change to what the strip
+     * carries cannot leave the words drawing over a button or a button sitting under a word.
+     */
+    private fun trailingSquares(): Int = 2 + micSquares()
+
+    /** Left edge of the square [fromEdge] steps in from the right edge, counting the edge as 1. */
+    private fun squareLeft(fromEdge: Int): Float = width - height.toFloat() * fromEdge
+
+    private fun squareRight(fromEdge: Int): Float = width - height.toFloat() * (fromEdge - 1)
+
     private fun settingsWidth(): Float = height.toFloat()
 
     private fun suggestionLeft(): Float = SuggestionStripLayout.suggestionLeft(height.toFloat())
 
     private fun suggestionWidth(): Float =
-        SuggestionStripLayout.suggestionWidth(width.toFloat(), height.toFloat(), voiceEnabled)
+        SuggestionStripLayout.suggestionWidth(
+            width.toFloat(),
+            height.toFloat(),
+            voiceEnabled,
+            trailingSquares(),
+        )
 
     /** The touch that owns the current press, so a resting second finger cannot steal or fire it. */
     private var activePointerId = MotionEvent.INVALID_POINTER_ID
@@ -574,7 +675,15 @@ class SuggestionStripView(context: Context) : View(context) {
                 editPressed = !settingsPressed && !clipboardPressed && isOverEdit(event.x)
                 micPressed =
                     !settingsPressed && !clipboardPressed && !editPressed && isOverMic(event.x)
-                val overButton = settingsPressed || clipboardPressed || editPressed || micPressed
+                emojiPressed =
+                    !settingsPressed && !clipboardPressed && !editPressed && !micPressed &&
+                        isOverEmoji(event.x)
+                languagePressed =
+                    !settingsPressed && !clipboardPressed && !editPressed && !micPressed &&
+                        !emojiPressed && isOverLanguage(event.x)
+                val overButton =
+                    settingsPressed || clipboardPressed || editPressed || micPressed ||
+                        emojiPressed || languagePressed
                 pressedIndex = if (overButton) -1 else indexAt(event.x)
                 longPressFired = false
                 if (pressedIndex >= 0) scheduleLongPress(pressedIndex)
@@ -596,7 +705,15 @@ class SuggestionStripView(context: Context) : View(context) {
                 // dropped the moment the drag is claimed, so a scroll can never commit the word the
                 // thumb happened to start on: the strip is the one place where a slip would type a
                 // word the user never chose.
-                if (words.size > MAX_VISIBLE && !settingsPressed && !clipboardPressed && !editPressed && !micPressed) {
+                if (
+                    words.size > MAX_VISIBLE &&
+                    !settingsPressed &&
+                    !clipboardPressed &&
+                    !editPressed &&
+                    !micPressed &&
+                    !emojiPressed &&
+                    !languagePressed
+                ) {
                     if (!dragging && kotlin.math.abs(x - dragStartX) > dp(8f)) {
                         dragging = true
                         releasePress()
@@ -617,18 +734,24 @@ class SuggestionStripView(context: Context) : View(context) {
                 val stillOnClipboard = clipboardPressed && isOverClipboard(x) && inBounds
                 val stillOnEdit = editPressed && isOverEdit(x) && inBounds
                 val stillOnMic = micPressed && isOverMic(x) && inBounds
+                val stillOnEmoji = emojiPressed && isOverEmoji(x) && inBounds
+                val stillOnLanguage = languagePressed && isOverLanguage(x) && inBounds
                 val stillOnWord = pressedIndex >= 0 && indexAt(x) == pressedIndex && inBounds
                 if (
                     settingsPressed != stillOnSettings ||
                     clipboardPressed != stillOnClipboard ||
                     editPressed != stillOnEdit ||
                     micPressed != stillOnMic ||
+                    emojiPressed != stillOnEmoji ||
+                    languagePressed != stillOnLanguage ||
                     (pressedIndex >= 0 && !stillOnWord)
                 ) {
                     settingsPressed = stillOnSettings
                     clipboardPressed = stillOnClipboard
                     editPressed = stillOnEdit
                     micPressed = stillOnMic
+                    emojiPressed = stillOnEmoji
+                    languagePressed = stillOnLanguage
                     if (!stillOnWord) {
                         pressedIndex = -1
                         cancelPendingLongPress()
@@ -678,6 +801,8 @@ class SuggestionStripView(context: Context) : View(context) {
         val clipboard = clipboardPressed
         val edit = editPressed
         val mic = micPressed
+        val emoji = emojiPressed
+        val language = languagePressed
         val held = longPressFired
         releasePress()
 
@@ -693,6 +818,12 @@ class SuggestionStripView(context: Context) : View(context) {
         } else if (mic) {
             announceForAccessibility("Voice typing")
             listener?.onVoiceRequested()
+        } else if (emoji) {
+            announceForAccessibility("Emoji")
+            listener?.onEmojiRequested()
+        } else if (language) {
+            announceForAccessibility("Next language")
+            listener?.onLanguageRequested()
         } else if (index in words.indices && !held) {
             announceForAccessibility("Suggestion ${words[index].word}")
             listener?.onSuggestionPicked(index, words[index].word)
@@ -707,6 +838,8 @@ class SuggestionStripView(context: Context) : View(context) {
         clipboardPressed = false
         editPressed = false
         micPressed = false
+        emojiPressed = false
+        languagePressed = false
         cancelPendingLongPress()
         invalidate()
     }
@@ -735,6 +868,14 @@ class SuggestionStripView(context: Context) : View(context) {
     }
 
     private fun isOverMic(x: Float): Boolean = voiceEnabled && x >= width - micWidth()
+
+    /** The emoji square: one in from the edge, or at the edge itself when the microphone is away. */
+    private fun isOverEmoji(x: Float): Boolean =
+        x >= squareLeft(1 + micSquares()) && x < squareRight(1 + micSquares())
+
+    /** The language square, one further in again. */
+    private fun isOverLanguage(x: Float): Boolean =
+        x >= squareLeft(2 + micSquares()) && x < squareRight(2 + micSquares())
 
     private fun isOverSettings(x: Float): Boolean = x >= 0f && x < settingsWidth()
 
@@ -776,6 +917,7 @@ class SuggestionStripView(context: Context) : View(context) {
             height = height.toFloat(),
             voiceEnabled = voiceEnabled,
             slotCount = MAX_VISIBLE,
+            trailingSquares = trailingSquares(),
         ) ?: return -1
         return candidateAtSlot(slot) ?: -1
     }
@@ -851,6 +993,8 @@ class SuggestionStripView(context: Context) : View(context) {
         const val A11Y_SETTINGS = 101
         const val A11Y_CLIPBOARD = 102
         const val A11Y_EDIT = 103
+        const val A11Y_EMOJI = 104
+        const val A11Y_LANGUAGE = 105
     }
 }
 
@@ -882,8 +1026,20 @@ internal object SuggestionMarks {
 internal object SuggestionStripLayout {
     fun suggestionLeft(height: Float): Float = height.coerceAtLeast(0f)
 
-    fun suggestionWidth(width: Float, height: Float, voiceEnabled: Boolean): Float =
-        (width - height.coerceAtLeast(0f) * if (voiceEnabled) 2f else 1f).coerceAtLeast(0f)
+    /**
+     * [trailingSquares] counts the buttons after the candidates beyond the microphone: the emoji and
+     * language squares. Defaulted to none so a caller that carries only the microphone keeps the
+     * arithmetic it had.
+     */
+    fun suggestionWidth(
+        width: Float,
+        height: Float,
+        voiceEnabled: Boolean,
+        trailingSquares: Int = 0,
+    ): Float = (
+        width -
+            height.coerceAtLeast(0f) * ((if (voiceEnabled) 2f else 1f) + trailingSquares)
+        ).coerceAtLeast(0f)
 
     fun slotAt(
         x: Float,
@@ -891,10 +1047,11 @@ internal object SuggestionStripLayout {
         height: Float,
         voiceEnabled: Boolean,
         slotCount: Int,
+        trailingSquares: Int = 0,
     ): Int? {
         if (slotCount <= 0) return null
         val left = suggestionLeft(height)
-        val contentWidth = suggestionWidth(width, height, voiceEnabled)
+        val contentWidth = suggestionWidth(width, height, voiceEnabled, trailingSquares)
         if (contentWidth <= 0f || x < left || x >= left + contentWidth) return null
         return ((x - left) / (contentWidth / slotCount)).toInt().coerceIn(0, slotCount - 1)
     }

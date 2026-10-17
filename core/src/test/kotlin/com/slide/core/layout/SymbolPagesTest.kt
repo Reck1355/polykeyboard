@@ -49,7 +49,9 @@ class SymbolPagesTest {
                 .flatMap { it.keys }
                 .filter { it.widthWeight != 1f }
                 .map { it.type to it.widthWeight.roundToInt() }
-            assertEquals("${page.id}: one wide key, the space bar", listOf(KeyType.SPACE to 3), wide)
+            // Five cells, not three: the globe and the emoji key left the row for the strip, and
+            // the page still covers its nine, so the space bar carries what they gave up.
+            assertEquals("${page.id}: one wide key, the space bar", listOf(KeyType.SPACE to 5), wide)
         }
     }
 

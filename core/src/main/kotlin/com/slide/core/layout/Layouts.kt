@@ -235,9 +235,6 @@ object Layouts {
         ),
     )
 
-    /** The language switch — the globe. */
-    private val globe = Key("\uD83C\uDF10", KeyType.LANGUAGE, gestureEligible = false)
-
     /**
      * The hexagonal letters board — the approved form.
      *
@@ -264,18 +261,26 @@ object Layouts {
                 HEX_ROW_OFFSET,
             ),
             KeyRow(
-                listOf(shift.copy(widthWeight = 1f)) +
-                    QwertyEn.rows[2].keys.drop(1).dropLast(1) +
-                    listOf(delete.copy(widthWeight = 1f)),
+                // Caps and backspace used to sit at this row's ends, which meant reaching past the
+                // letters for both of them: backspace landed beside M, one slip from the letter a
+                // thumb had just typed. They have moved to the bottom row, so the letters keep
+                // their places and the row is inset a cell at each end to hold the grid's width.
+                QwertyEn.rows[2].keys.drop(1).dropLast(1),
+                leadingGap = 1f,
+                trailingGap = 1f,
             ),
             KeyRow(
+                // Seven one-cell keys and space, the same nine cells the row held before, so the
+                // honeycomb's grid is untouched. The globe and the emoji key have left the board
+                // for buttons on the strip above it, where neither competes with a letter row and
+                // both stay reachable from the symbol pages, which never carried them.
                 listOf(
-                    globe,
                     toSymbols.copy(widthWeight = 1f),
+                    shift.copy(widthWeight = 1f),
                     comma,
                     space.copy(widthWeight = 3f),
                     period,
-                    emoji,
+                    delete.copy(widthWeight = 1f),
                     enter.copy(widthWeight = 1f),
                 ),
                 HEX_ROW_OFFSET,
@@ -305,9 +310,12 @@ object Layouts {
                 HEX_ROW_OFFSET,
             ),
             KeyRow(
-                listOf(shift.copy(widthWeight = 1f)) +
-                    QwertyEs.rows[2].keys.drop(1).dropLast(1) +
-                    listOf(delete.copy(widthWeight = 1f)),
+                // Caps and backspace have moved to the bottom row, which Spanish shares with
+                // English, so this row is the letters alone and inset a cell at each end to keep
+                // the grid's width.
+                QwertyEs.rows[2].keys.drop(1).dropLast(1),
+                leadingGap = 1f,
+                trailingGap = 1f,
             ),
             HexQwertyEn.rows[3],
         ),
@@ -316,18 +324,17 @@ object Layouts {
     /**
      * The honeycomb's bottom row with one address delimiter in it (`@` for email, `/` for a URL).
      *
-     * Nine cells exactly, like the letters board's own bottom row: the globe, `?123`, the delimiter
-     * where the comma sits, the three-cell space bar, the period, `.com` where the emoji key sits,
-     * and enter. The comma and the emoji are the two that give way, which is the same trade the
-     * stock address rows make, and the ten-column board is what stays: a row one cell wider would
-     * scale the whole honeycomb down to fit it.
+     * Nine cells exactly, like the letters board's own bottom row: `?123`, the delimiter where the
+     * comma sits, the space bar, the period, `.com`, and enter. The globe and the emoji key are not
+     * here because they are not on any board now — they sit on the strip above, where they are
+     * reachable from every page. Space takes up the two cells they gave back, and the ten-column
+     * board is what stays: a row one cell wider would scale the whole honeycomb down to fit it.
      */
     private fun hexDelimiterRow(delimiter: String) = KeyRow(
         listOf(
-            globe,
             toSymbols.copy(widthWeight = 1f),
             sym(delimiter),
-            space.copy(widthWeight = 3f),
+            space.copy(widthWeight = 4f),
             period,
             Key(".com", KeyType.CHARACTER, output = ".com", gestureEligible = false),
             enter.copy(widthWeight = 1f),
@@ -626,13 +633,14 @@ object Layouts {
                     listOf(delete.copy(widthWeight = 1f)),
             ),
             KeyRow(
+                // Same nine cells, with the globe and the emoji key gone to the strip above. Space
+                // takes what they left: a wide bar is no bad thing on the page where the letters
+                // are the thing you are reaching back for.
                 listOf(
-                    globe,
                     toAlpha.copy(widthWeight = 1f),
                     comma,
-                    space.copy(widthWeight = 3f),
+                    space.copy(widthWeight = 5f),
                     period,
-                    emoji,
                     enter.copy(widthWeight = 1f),
                 ),
                 HEX_ROW_OFFSET,
@@ -676,12 +684,10 @@ object Layouts {
             ),
             KeyRow(
                 listOf(
-                    globe,
                     toAlpha.copy(widthWeight = 1f),
                     sym("<", "‹«"),
-                    space.copy(widthWeight = 3f),
+                    space.copy(widthWeight = 5f),
                     sym(">", "›»"),
-                    emoji,
                     enter.copy(widthWeight = 1f),
                 ),
                 HEX_ROW_OFFSET,

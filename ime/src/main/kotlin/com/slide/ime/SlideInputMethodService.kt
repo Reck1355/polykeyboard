@@ -2833,6 +2833,22 @@ class SlideInputMethodService :
      * so a first tap on a fresh install asks and a second one dictates. Worth it to avoid asking
      * for the microphone during setup, before the user has any reason to say yes.
      */
+    /**
+     * The strip's emoji button. The same call the board's emoji key made, deliberately: the key is
+     * gone but the behaviour it had is not, and one path means the two cannot drift apart.
+     */
+    override fun onEmojiRequested() {
+        showEmojiPanel()
+    }
+
+    /**
+     * The strip's language button. The board's globe called `switchToNextLanguage` from [handleKey]
+     * and this is that call, so which language is active is still activateLanguage's answer alone.
+     */
+    override fun onLanguageRequested() {
+        switchToNextLanguage()
+    }
+
     override fun onVoiceRequested() {
         if (queueBehindGestureInput(::processVoiceRequested)) return
         processVoiceRequested()

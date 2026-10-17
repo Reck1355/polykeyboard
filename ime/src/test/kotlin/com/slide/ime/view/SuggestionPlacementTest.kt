@@ -52,6 +52,32 @@ class SuggestionPlacementTest {
     }
 
     @Test
+    fun `the emoji and language buttons take their width from the candidates`() {
+        // The strip carries the two buttons the boards gave up. They are on it in every state, so
+        // the candidate window is what gives way, and the window's right edge is exactly where the
+        // language button's square begins: a point on a button is never read as a candidate.
+        assertEquals(
+            168f,
+            SuggestionStripLayout.suggestionWidth(360f, 48f, voiceEnabled = true, trailingSquares = 2),
+        )
+        assertEquals(
+            216f,
+            SuggestionStripLayout.suggestionWidth(360f, 48f, voiceEnabled = false, trailingSquares = 2),
+        )
+        assertNull(
+            SuggestionStripLayout.slotAt(
+                216f, 360f, 48f, voiceEnabled = true, slotCount = 3, trailingSquares = 2,
+            ),
+        )
+        assertEquals(
+            2,
+            SuggestionStripLayout.slotAt(
+                214f, 360f, 48f, voiceEnabled = true, slotCount = 3, trailingSquares = 2,
+            ),
+        )
+    }
+
+    @Test
     fun `the correction mark follows its candidate into the centre`() {
         val candidates = listOf(
             StripSuggestion("the", isCorrection = true),
