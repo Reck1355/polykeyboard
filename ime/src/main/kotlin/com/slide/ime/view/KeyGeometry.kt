@@ -124,6 +124,27 @@ object KeyGeometry {
      * The cell stays the layout's unit — positions are [placed]'s and nothing here moves them —
      * so the cap is derived from the cell rather than replacing it.
      */
+    /**
+     * The cap of one cell of a key that may span several, which is how a wide key is drawn.
+     *
+     * [hexShapeFor] answers "which key is under this finger" and gives the whole bar one cap even
+     * when it spans three cells. The drawing is per cell instead, with the seams between the cells
+     * painted out, which is what makes the space bar read as three hexes joined in the middle
+     * rather than as one slab. One function, so a preview of the board and the board itself cannot
+     * draw different shapes.
+     */
+    fun hexShapeForCell(placed: PlacedKey, cell: Int, cells: Int): HexShape {
+        val cellWidth = placed.width / cells
+        val halfHeight = placed.height * 0.5f * HexKeyMetrics.HEIGHT_FRACTION
+        return HexShape(
+            centerX = placed.left + (cell + 0.5f) * cellWidth,
+            centerY = placed.centerY,
+            halfWidth = cellWidth * 0.5f * HexKeyMetrics.WIDTH_FRACTION,
+            halfHeight = halfHeight,
+            shoulderHalfHeight = halfHeight * HexKeyMetrics.SHOULDER_HEIGHT_FRACTION,
+        )
+    }
+
     fun hexShapeFor(placed: PlacedKey): HexShape {
         val halfHeight = placed.height * 0.5f * HexKeyMetrics.HEIGHT_FRACTION
         return HexShape(

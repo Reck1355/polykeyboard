@@ -641,12 +641,14 @@ class SuggestionStripView(context: Context) : View(context) {
      * The candidate window and every hit test read this one number, so a change to what the strip
      * carries cannot leave the words drawing over a button or a button sitting under a word.
      */
-    private fun trailingSquares(): Int = 2 + micSquares()
+    private fun trailingSquares(): Int = SuggestionStripLayout.trailingSquares(voiceEnabled)
 
     /** Left edge of the square [fromEdge] steps in from the right edge, counting the edge as 1. */
-    private fun squareLeft(fromEdge: Int): Float = width - height.toFloat() * fromEdge
+    private fun squareLeft(fromEdge: Int): Float =
+        SuggestionStripLayout.squareLeft(width.toFloat(), height.toFloat(), fromEdge)
 
-    private fun squareRight(fromEdge: Int): Float = width - height.toFloat() * (fromEdge - 1)
+    private fun squareRight(fromEdge: Int): Float =
+        SuggestionStripLayout.squareRight(width.toFloat(), height.toFloat(), fromEdge)
 
     private fun settingsWidth(): Float = height.toFloat()
 
@@ -1025,6 +1027,20 @@ internal object SuggestionMarks {
 /** Pure toolbar geometry, separated from Android drawing so edge hit targets stay regression-tested. */
 internal object SuggestionStripLayout {
     fun suggestionLeft(height: Float): Float = height.coerceAtLeast(0f)
+
+    /**
+     * The trailing buttons' share of the strip: the emoji and the language squares always, the
+     * microphone's while voice is on. The candidate window reads it, and so does every hit test.
+     */
+    fun trailingSquares(voiceEnabled: Boolean): Int = 2 + if (voiceEnabled) 1 else 0
+
+    /** Left edge of the square [fromEdge] steps in from the right edge, counting the edge as 1. */
+    fun squareLeft(width: Float, height: Float, fromEdge: Int): Float =
+        width - height.coerceAtLeast(0f) * fromEdge
+
+    /** Right edge of the same square. */
+    fun squareRight(width: Float, height: Float, fromEdge: Int): Float =
+        width - height.coerceAtLeast(0f) * (fromEdge - 1)
 
     /**
      * [trailingSquares] counts the buttons after the candidates beyond the microphone: the emoji and

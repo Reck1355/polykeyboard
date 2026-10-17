@@ -892,16 +892,12 @@ class KeyboardView @JvmOverloads constructor(
     private fun drawHexSurface(canvas: Canvas, placed: PlacedKey, pressOverlay: Float) {
         val cells = HexBoard.spanCells(placed.key.widthWeight)
         val fill = hexBackgroundFor(placed.key)
-        val cellWidth = placed.width / cells
-        val halfWidth = cellWidth * 0.5f * HexKeyMetrics.WIDTH_FRACTION
-        val halfHeight = placed.height * 0.5f * HexKeyMetrics.HEIGHT_FRACTION
-        val shoulderHalfHeight = halfHeight * HexKeyMetrics.SHOULDER_HEIGHT_FRACTION
 
         fillPaint.color = fill
         hexStrokePaint.color = HexKeyStyle.edgeColour(settings.showKeyBorders, hexPalette)
         hexStrokePaint.strokeWidth = hexEdgeWidth
         for (cell in 0 until cells) {
-            val path = hexPathFor(capAt(placed, cell, cellWidth, halfWidth, halfHeight, shoulderHalfHeight))
+            val path = hexPathFor(KeyGeometry.hexShapeForCell(placed, cell, cells))
             canvas.drawPath(path, fillPaint)
             canvas.drawPath(path, hexStrokePaint)
         }
@@ -912,8 +908,10 @@ class KeyboardView @JvmOverloads constructor(
         if (cells > 1) {
             hexStrokePaint.color = fill
             hexStrokePaint.strokeWidth = hexEdgeWidth * 2f + 1f
-            val shoulderTop = placed.centerY - shoulderHalfHeight
-            val shoulderBottom = placed.centerY + shoulderHalfHeight
+            val seam = KeyGeometry.hexShapeForCell(placed, 0, cells)
+            val shoulderTop = seam.shoulderTop
+            val shoulderBottom = seam.shoulderBottom
+            val cellWidth = placed.width / cells
             for (cell in 1 until cells) {
                 val seamX = placed.left + cell * cellWidth
                 canvas.drawLine(seamX, shoulderTop, seamX, shoulderBottom, hexStrokePaint)
@@ -924,27 +922,11 @@ class KeyboardView @JvmOverloads constructor(
             fillPaint.color = hexPalette.pressed
             fillPaint.alpha = (Color.alpha(hexPalette.pressed) * pressOverlay).roundToInt()
             for (cell in 0 until cells) {
-                val path = hexPathFor(capAt(placed, cell, cellWidth, halfWidth, halfHeight, shoulderHalfHeight))
+                val path = hexPathFor(KeyGeometry.hexShapeForCell(placed, cell, cells))
                 canvas.drawPath(path, fillPaint)
             }
         }
     }
-
-    /** The cap of one cell of a key that may span several. */
-    private fun capAt(
-        placed: PlacedKey,
-        cell: Int,
-        cellWidth: Float,
-        halfWidth: Float,
-        halfHeight: Float,
-        shoulderHalfHeight: Float,
-    ): HexShape = HexShape(
-        centerX = placed.left + (cell + 0.5f) * cellWidth,
-        centerY = placed.centerY,
-        halfWidth = halfWidth,
-        halfHeight = halfHeight,
-        shoulderHalfHeight = shoulderHalfHeight,
-    )
 
     /** Rewrites [hexPath] as the outline of [cap] and hands it back for drawing. */
     private fun hexPathFor(cap: HexShape): Path {
@@ -959,11 +941,7 @@ class KeyboardView @JvmOverloads constructor(
     }
 
     /** The hex board's fills, from the six-slot palette rather than the keyboard theme. */
-    private fun hexBackgroundFor(key: Key): Int = when (key.type) {
-        KeyType.ENTER -> hexPalette.enterKey
-        KeyType.CHARACTER, KeyType.SPACE -> hexPalette.key
-        else -> hexPalette.specialKey
-    }
+    private fun hexBackgroundFor(key: Key): Int = HexKeyStyle.backgroundFor(key, hexPalette)
 
     /** One compact optical box and stroke weight keeps every action glyph in the same family. */
     private fun drawActionIcon(canvas: Canvas, type: KeyType, placed: PlacedKey) {
@@ -2092,6 +2070,18 @@ internal object SearchHeaderRouting {
 internal object HexKeyStyle {
     fun edgeColour(bordersOn: Boolean, palette: HexPalette): Int =
         if (bordersOn) palette.label else palette.background
+
+    /**
+     * Which of the six palette slots a key is filled from.
+     *
+     * Here rather than in the view because a preview of the board needs the same answer, and a fill
+     * decided in two places is a fill that can disagree.
+     */
+    fun backgroundFor(key: Key, palette: HexPalette): Int = when (key.type) {
+        KeyType.ENTER -> palette.enterKey
+        KeyType.CHARACTER, KeyType.SPACE -> palette.key
+        else -> palette.specialKey
+    }
 }
 
 /** The three colours one press preview is drawn in. */
