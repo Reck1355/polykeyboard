@@ -7,6 +7,11 @@ plugins {
     alias(libs.plugins.kotlin.compose)
 }
 
+// Packaging tier. `full` is everything; `slim` is the same keyboard without on-device dictation and
+// without the Spanish data, which takes the download from 221 MiB to roughly 31 MiB. Absent
+// property means full, so a forgotten flag can only ever ship the complete build.
+val polykeyboardTier: String = (findProperty("polykeyboardTier") as String?)?.lowercase() ?: "full"
+
 android {
     namespace = "com.slide.app"
     compileSdk = 37
@@ -20,6 +25,9 @@ android {
             // armeabi-v7a is kept for a device older than it and costs 2.3 MB, which is not worth the doubt.
             abiFilters += listOf("arm64-v8a", "armeabi-v7a")
         }
+        buildConfigField("boolean", "HAS_DICTATION", if (polykeyboardTier == "full") "true" else "false")
+        resValue("string", "app_name", if (polykeyboardTier == "full") "Polykeyboard" else "Polykeyboard Slim")
+
         // Our own identity, not the fork parent's. This is the package Android uses as
         // the app's identity on the device: it decides which installs update which. It is
         // deliberately NOT com.slide, so a release-signed Polykeyboard also installs
@@ -60,6 +68,19 @@ android {
         // Whisper maps its model directly, while swipe inference copies already-packed models to
         // mmap-friendly storage; the application therefore owns both packaging rules.
         noCompress += listOf("bin", "pte")
+
+        // What the slim tier leaves out, by name and for a measured reason: the English speech model
+        // is 181 MiB, which is the whole download, the ggml/whisper/slide_asr libraries exist only to
+        // run it, and the Spanish bundle is the one language whose data is not shared with English.
+        // The library modules cannot express this themselves: their source-set accessors do not
+        // survive AGP's own decorators, so the rule lives here, on the artifact that ships.
+        if (polykeyboardTier != "full") {
+            // A bare name matches any path component, so `pinyin` takes the whole Mandarin directory:
+            // 6 MiB of tables for a language this build does not offer. The unit tests read those
+            // files from the source tree, never from the APK, so they still cover the engine.
+            ignoreAssetsPattern =
+                "ggml-small.en-q5_1.bin:lexicon_es.bin:bigrams_es.bin:trigrams_es.bin:pinyin"
+        }
     }
 
     packaging {
@@ -68,6 +89,11 @@ android {
             // shared C++ runtime. Package one process-wide copy so Gradle does not reject the
             // otherwise valid duplicate transitive input.
             pickFirsts += "**/libc++_shared.so"
+            // Speech backends and only speech backends: the swipe encoder's runtime stays, because
+            // gesture typing is not optional in either build.
+            if (polykeyboardTier != "full") {
+                excludes += listOf("**/libggml*.so", "**/libwhisper.so", "**/libslide_asr.so")
+            }
         }
     }
 
@@ -78,6 +104,9 @@ android {
 
     buildFeatures {
         compose = true
+        buildConfig = true
+        // The slim tier renames the app through resValue rather than by editing the manifest.
+        resValues = true
     }
 }
 

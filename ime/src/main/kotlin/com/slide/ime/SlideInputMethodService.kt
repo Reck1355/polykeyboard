@@ -250,7 +250,12 @@ class SlideInputMethodService :
      * recording, and every suggestion takes the width the button held.
      */
     private fun voiceAvailableForEditor(): Boolean =
-        deviceHasMicrophone && editorInputPolicy.allowsVoice && settings.micButtonEnabled
+        deviceHasMicrophone &&
+            editorInputPolicy.allowsVoice &&
+            settings.micButtonEnabled &&
+            // A slim build carries no speech model and no speech libraries, so the microphone is not
+            // a control that is switched off: it is not part of the keyboard at all.
+            BuildConfig.HAS_DICTATION
 
     /** Whether the active editor set IME_FLAG_NO_PERSONALIZED_LEARNING. */
     private var editorRequestsNoLearning = false

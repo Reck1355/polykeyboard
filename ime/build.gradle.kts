@@ -8,6 +8,15 @@ android {
 
     defaultConfig {
         minSdk = 26
+        buildConfigField(
+            "boolean",
+            "HAS_DICTATION",
+            if (((findProperty("polykeyboardTier") as String?)?.lowercase() ?: "full") == "full") "true" else "false",
+        )
+    }
+
+    buildFeatures {
+        buildConfig = true
     }
 
     compileOptions {

@@ -49,6 +49,26 @@ size and SHA-256, package, newer SemVer and 64-bit Android version code, and sig
 when Android exposes it, then opens Android's normal installer for confirmation. Android itself
 always enforces the installed app's signing identity.
 
+## Two builds, one keyboard
+
+| Download | Languages | Dictation | Roughly |
+|---|---|---|---|
+| Polykeyboard | English, Spanish, Mandarin | on device, offline | 221 MiB |
+| Polykeyboard Slim | English | none | 31 MiB |
+
+The difference is data, not behaviour. The keyboard, the hexagonal keys, the split landscape board
+and gesture typing are identical in both, and the small build is small because the English speech
+model is 181 MiB of the large one and is simply not there. Nothing ships that the build cannot
+use: in Slim the microphone is not drawn, and a language whose dictionary is absent cannot be
+selected, so there is no switch that does nothing. Build either with
+
+```
+./gradlew :app:assembleRelease                     # full
+./gradlew :app:assembleRelease -PpolykeyboardTier=slim
+```
+
+and check the artifact against the tier it claims with `tools/verify_polykeyboard_tiers.py`.
+
 ## Known CI failure, stated rather than hidden
 
 The continuous integration `verify` job fails, and has on every push, on the pinyin tests

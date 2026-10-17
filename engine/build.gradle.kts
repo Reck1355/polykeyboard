@@ -18,6 +18,7 @@ android {
 
     // The models are already tightly packed; letting the build recompress them only costs startup
     // time, since they are copied out of the APK for memory-mapped inference.
+
     androidResources {
         noCompress += listOf("bin", "pte")
     }

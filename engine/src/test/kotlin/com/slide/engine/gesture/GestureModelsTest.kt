@@ -53,13 +53,22 @@ class GestureModelsTest {
         // Spanish resolves to itself and decodes against its own word list, so it glides without
         // pretending to be English. An accented word swiped with a plain letter will be missed, and
         // that is the accepted cost of decoding something rather than nothing.
-        assertEquals(KeyboardLanguages.SPANISH, KeyboardLanguages.resolve("es_ES"))
-        assertTrue(GestureModels.supports(KeyboardLanguages.SPANISH))
-        // Mandarin glides too, against the pinyin table's keys rather than a word list, so the gate is
-        // open for every language this build ships. The list is what differs, and it is chosen at the
-        // call site for exactly that reason.
-        assertTrue(GestureModels.supports(KeyboardLanguages.CHINESE))
-        // And every language with a model is a language the resolver can return at all.
-        assertTrue(KeyboardLanguages.SUPPORTED.containsAll(GestureModels.LANGUAGES))
+        // A language this build does not carry resolves to one it does, in the resolver rather than
+        // at the call site, so nothing can hand the board a language with no data behind it.
+        assertEquals(
+            if (KeyboardLanguages.SUPPORTED.contains(KeyboardLanguages.SPANISH)) KeyboardLanguages.SPANISH else KeyboardLanguages.FALLBACK,
+            KeyboardLanguages.resolve("es_ES"),
+        )
+        // Every language the build offers must glide, whichever tier it is: the list is the only
+        // thing that differs between them, and a language offered without a model would hand the
+        // user a board that quietly stops learning their swipes.
+        for (entry in KeyboardLanguages.SWITCHABLE) {
+            assertTrue("${entry.language} is offered but cannot glide", GestureModels.supports(entry.language))
+        }
+        assertEquals(KeyboardLanguages.SUPPORTED, KeyboardLanguages.SWITCHABLE.map { it.language }.toSet())
+        // And the direction that must hold in both tiers: the engine can glide every language the
+        // build can offer. The reverse is not required, because the engine is code and the offer is
+        // data, and a slim build ships less data than the engine can handle.
+        assertTrue(GestureModels.LANGUAGES.containsAll(KeyboardLanguages.SUPPORTED))
     }
 }

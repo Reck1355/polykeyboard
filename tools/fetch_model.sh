@@ -23,7 +23,7 @@ if [[ "$MODEL" != "small.en-q5_1" ]]; then
 fi
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-DEST_DIR="$ROOT/asr/src/main/assets"
+DEST_DIR="$ROOT/asr/src/full/assets"
 DEST="$DEST_DIR/ggml-$MODEL.bin"
 
 mkdir -p "$DEST_DIR"

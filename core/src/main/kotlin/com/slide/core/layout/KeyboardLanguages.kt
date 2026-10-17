@@ -1,5 +1,7 @@
 package com.slide.core.layout
 
+import com.slide.core.BuildConfig
+
 /**
  * The one place a language is decided.
  *
@@ -50,7 +52,11 @@ object KeyboardLanguages {
      * asset to load would leave it typing with no dictionary at all, so an unsupported tag falls
      * back rather than reaching a board with nothing behind it.
      */
-    val SUPPORTED: Set<String> = setOf(FALLBACK, SPANISH, CHINESE)
+    val SUPPORTED: Set<String> = if (BuildConfig.ENGLISH_ONLY) {
+        setOf(FALLBACK)
+    } else {
+        setOf(FALLBACK, SPANISH, CHINESE)
+    }
 
     /**
      * One selectable language: the shipped language it resolves to, the subtype tag it is declared
@@ -68,11 +74,18 @@ object KeyboardLanguages {
      * both walk. English is first because it is the fallback the board is drawn in before anything
      * has been chosen.
      */
+    /**
+     * The list both doors speak in terms of, narrowed to what this build carries. A slim build
+     * ships English data only, and offering a language whose lexicon is absent would be the quiet
+     * failure this object exists to prevent: a Spanish board reading an English dictionary. Both
+     * doors read this one list, so neither can disagree with the other.
+     */
     val SWITCHABLE: List<Entry> = listOf(
         Entry(FALLBACK, "en-US", "English"),
         Entry(SPANISH, "es-ES", "Español"),
         Entry(CHINESE, "zh-CN", "中文"),
     )
+        .filter { !BuildConfig.ENGLISH_ONLY || it.language == FALLBACK }
 
     /** The entry for a resolved [language], or the fallback's when nothing matches. */
     fun entryFor(language: String): Entry =

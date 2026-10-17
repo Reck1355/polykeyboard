@@ -645,39 +645,44 @@ private fun SetupScreen(repository: SettingsRepository) {
                 }
             }
 
-            Card(Modifier.fillMaxWidth()) {
-                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("Voice typing", style = MaterialTheme.typography.titleMedium)
-                    Text(
-                        "Speech is recognised on this device. Microphone audio is kept only in " +
-                            "memory while Polykeyboard transcribes it; audio and transcripts are " +
-                            "not sent to a server by Polykeyboard.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
+            // Dictation is data, and the slim build ships none of it: no model, no libraries.
+            // A card that offers a voice model the build does not carry would be a control that
+            // cannot act, so the whole section is absent rather than shown greyed out.
+            if (BuildConfig.HAS_DICTATION) {
+                Card(Modifier.fillMaxWidth()) {
+                    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text("Voice typing", style = MaterialTheme.typography.titleMedium)
+                        Text(
+                            "Speech is recognised on this device. Microphone audio is kept only in " +
+                                "memory while Polykeyboard transcribes it; audio and transcripts are " +
+                                "not sent to a server by Polykeyboard.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
 
-                    // Resolved through the stored setting so this card can never disagree with
-                    // the model the keyboard actually loads; unknown values fall back to Default.
-                    SettingSwitch(
-                        "Microphone button",
-                        settings.micButtonEnabled,
-                    ) { value -> scope.launch { repository.update { it.copy(micButtonEnabled = value) } } }
-                    Text(
-                        "Shows the microphone at the left end of the bar above the keys. Switched " +
-                            "off, the suggestions keep that width and nothing starts a recording " +
-                            "from the keyboard; the model below stays set up either way.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
+                        // Resolved through the stored setting so this card can never disagree with
+                        // the model the keyboard actually loads; unknown values fall back to Default.
+                        SettingSwitch(
+                            "Microphone button",
+                            settings.micButtonEnabled,
+                        ) { value -> scope.launch { repository.update { it.copy(micButtonEnabled = value) } } }
+                        Text(
+                            "Shows the microphone at the left end of the bar above the keys. Switched " +
+                                "off, the suggestions keep that width and nothing starts a recording " +
+                                "from the keyboard; the model below stays set up either way.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
 
-                    val model = WhisperModel.fromId(settings.voiceModelId)
-                    Text(model.label, style = MaterialTheme.typography.bodyLarge)
-                    Text(
-                        "${model.description} Polykeyboard packages one verified model and runs " +
-                            "it entirely on this device.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
+                        val model = WhisperModel.fromId(settings.voiceModelId)
+                        Text(model.label, style = MaterialTheme.typography.bodyLarge)
+                        Text(
+                            "${model.description} Polykeyboard packages one verified model and runs " +
+                                "it entirely on this device.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
                 }
             }
 

@@ -48,3 +48,6 @@ tools/*-raw.png
 tools/send-*.png
 tools/look-*.png
 tools/*-final.png
+
+# v4 signing byproduct
+*.idsig

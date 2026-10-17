@@ -51,6 +51,15 @@ android {
     // Pin the native toolchain both for reproducible releases and cache invalidation.
     ndkVersion = "28.2.13676358"
 
+
+// Packaging tier. `full` is everything; `slim` is the same keyboard without on-device dictation
+// and without the Spanish data, for a download a tenth of the size. Nothing here changes what the
+// keyboard does when the feature it excludes is absent: the flag below is read at runtime so the
+// microphone never appears and no dead control is drawn. Absent property = full, so a forgotten
+// flag can only ever ship the complete build.
+val polykeyboardTier: String =
+    (findProperty("polykeyboardTier") as String?)?.lowercase() ?: "full"
+
     defaultConfig {
         minSdk = 26
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
@@ -89,6 +98,20 @@ android {
         cmake {
             path = file("src/main/cpp/CMakeLists.txt")
             version = "3.22.1"
+        }
+    }
+
+    // The 181 MiB speech model is the whole download and lives only in the full tier's tier's directory, so a slim build cannot carry it even by accident:
+    // the conventional directory holds only what both tiers share.
+
+    if (polykeyboardTier != "full") {
+        packaging {
+            jniLibs {
+                // The speech backend is the only reason this module has native code. With dictation
+                // out, its libraries are dead weight, and nothing loads them: the flag guards every
+                // entry point that would touch them.
+                excludes += listOf("**/libggml*.so", "**/libwhisper.so", "**/libslide_asr.so")
+            }
         }
     }
 

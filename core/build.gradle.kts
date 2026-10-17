@@ -8,6 +8,15 @@ android {
 
     defaultConfig {
         minSdk = 26
+        buildConfigField(
+            "boolean",
+            "ENGLISH_ONLY",
+            if (((findProperty("polykeyboardTier") as String?)?.lowercase() ?: "full") == "full") "false" else "true",
+        )
+    }
+
+    buildFeatures {
+        buildConfig = true
     }
 
     compileOptions {

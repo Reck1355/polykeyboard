@@ -1,5 +1,7 @@
 package com.slide.core.layout
 
+import com.slide.core.BuildConfig
+
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertSame
@@ -18,7 +20,14 @@ class KeyboardLanguagesTest {
     @Test
     fun `spanish subtypes resolve to spanish`() {
         for (tag in listOf("es_ES", "es-ES", "es", "es_419", "es-US", "ES_es")) {
-            assertEquals(tag, KeyboardLanguages.SPANISH, KeyboardLanguages.resolve(tag))
+            // A slim build carries no data for this language, so the answer must be the language it
+            // does carry. Asserting the clamp here is the half that catches a build offering a board
+            // whose dictionary is not in the APK.
+            assertEquals(
+                tag,
+                if (BuildConfig.ENGLISH_ONLY) KeyboardLanguages.FALLBACK else KeyboardLanguages.SPANISH,
+                KeyboardLanguages.resolve(tag),
+            )
         }
     }
 
@@ -32,7 +41,14 @@ class KeyboardLanguagesTest {
     @Test
     fun `chinese subtypes resolve to chinese`() {
         for (tag in listOf("zh_CN", "zh-CN", "zh", "zh_Hans", "zh_CN_#Hans", "ZH_cn")) {
-            assertEquals(tag, KeyboardLanguages.CHINESE, KeyboardLanguages.resolve(tag))
+            // A slim build carries no data for this language, so the answer must be the language it
+            // does carry. Asserting the clamp here is the half that catches a build offering a board
+            // whose dictionary is not in the APK.
+            assertEquals(
+                tag,
+                if (BuildConfig.ENGLISH_ONLY) KeyboardLanguages.FALLBACK else KeyboardLanguages.CHINESE,
+                KeyboardLanguages.resolve(tag),
+            )
         }
     }
 
@@ -44,13 +60,23 @@ class KeyboardLanguagesTest {
     }
 
     @Test
-    fun `english, spanish and chinese are supported`() {
-        assertEquals(setOf("en", "es", "zh"), KeyboardLanguages.SUPPORTED)
+    fun `what is supported is what this build carries`() {
+        // Both tiers are gated: a full build ships all three, and a slim build must answer for one.
+        // The half that matters is the slim half, because there the Spanish and Chinese data is
+        // absent, and a language offered with no lexicon behind it types into an empty dictionary.
+        val expected = if (BuildConfig.ENGLISH_ONLY) setOf("en") else setOf("en", "es", "zh")
+        assertEquals(expected, KeyboardLanguages.SUPPORTED)
         assertTrue(KeyboardLanguages.isSupported("en"))
-        assertTrue(KeyboardLanguages.isSupported("es"))
-        assertTrue(KeyboardLanguages.isSupported("zh"))
         assertFalse(KeyboardLanguages.isSupported("fr"))
         assertFalse(KeyboardLanguages.isSupported(""))
+        assertEquals(KeyboardLanguages.SUPPORTED, KeyboardLanguages.SWITCHABLE.map { it.language }.toSet())
+        for (language in listOf("es", "zh")) {
+            assertEquals(
+                "a language this build does not carry must resolve to one it does",
+                if (BuildConfig.ENGLISH_ONLY) KeyboardLanguages.FALLBACK else language,
+                KeyboardLanguages.resolve("$language-CN"),
+            )
+        }
     }
 
     @Test
