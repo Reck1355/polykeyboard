@@ -2849,6 +2849,15 @@ class SlideInputMethodService :
         switchToNextLanguage()
     }
 
+    /**
+     * The strip's symbols button. The board's `?123` key called [switchLayer] with [Layer.SYMBOLS]
+     * and this is that call: the bottom row gave its cell up so the row could be seven cells wide,
+     * and the page it opened is still one tap away, above the board rather than on it.
+     */
+    override fun onSymbolsRequested() {
+        switchLayer(Layer.SYMBOLS)
+    }
+
     override fun onVoiceRequested() {
         if (queueBehindGestureInput(::processVoiceRequested)) return
         processVoiceRequested()

@@ -59,6 +59,9 @@ class SuggestionStripView(context: Context) : View(context) {
 
         /** The language button above the board was tapped. */
         fun onLanguageRequested() = Unit
+
+        /** The symbols button above the board was tapped: the `?123` page, off the board. */
+        fun onSymbolsRequested() = Unit
     }
 
     var listener: Listener? = null
@@ -75,6 +78,7 @@ class SuggestionStripView(context: Context) : View(context) {
             editPressed = false
             emojiPressed = false
             languagePressed = false
+            symbolsPressed = false
             refreshAccessibilityDescription()
             invalidate()
         }
@@ -131,6 +135,7 @@ class SuggestionStripView(context: Context) : View(context) {
      */
     private var emojiPressed = false
     private var languagePressed = false
+    private var symbolsPressed = false
     private var emptyMessage = "Type or swipe for suggestions"
 
     private val handler = Handler(Looper.getMainLooper())
@@ -163,6 +168,7 @@ class SuggestionStripView(context: Context) : View(context) {
             if (voiceEnabled && isOverMic(x)) return A11Y_MIC
             if (isOverEmoji(x)) return A11Y_EMOJI
             if (isOverLanguage(x)) return A11Y_LANGUAGE
+            if (isOverSymbols(x)) return A11Y_SYMBOLS
             val index = indexAt(x)
             return if (index >= 0) A11Y_WORD_BASE + index else INVALID_ID
         }
@@ -177,6 +183,7 @@ class SuggestionStripView(context: Context) : View(context) {
             if (voiceEnabled) virtualViewIds += A11Y_MIC
             virtualViewIds += A11Y_EMOJI
             virtualViewIds += A11Y_LANGUAGE
+            virtualViewIds += A11Y_SYMBOLS
         }
 
         override fun onPopulateNodeForVirtualView(
@@ -229,6 +236,18 @@ class SuggestionStripView(context: Context) : View(context) {
                         squareLeft(2 + micSquares()).toInt(),
                         0,
                         squareRight(2 + micSquares()).toInt(),
+                        height,
+                    ),
+                )
+                return
+            }
+            if (virtualViewId == A11Y_SYMBOLS) {
+                node.contentDescription = "Symbols and numbers"
+                node.setBoundsInParent(
+                    Rect(
+                        squareLeft(3 + micSquares()).toInt(),
+                        0,
+                        squareRight(3 + micSquares()).toInt(),
                         height,
                     ),
                 )
@@ -294,6 +313,11 @@ class SuggestionStripView(context: Context) : View(context) {
             if (virtualViewId == A11Y_LANGUAGE) {
                 if (action != AccessibilityNodeInfo.ACTION_CLICK) return false
                 listener?.onLanguageRequested()
+                return true
+            }
+            if (virtualViewId == A11Y_SYMBOLS) {
+                if (action != AccessibilityNodeInfo.ACTION_CLICK) return false
+                listener?.onSymbolsRequested()
                 return true
             }
             val index = virtualViewId - A11Y_WORD_BASE
@@ -385,6 +409,7 @@ class SuggestionStripView(context: Context) : View(context) {
         drawMicButton(canvas)
         drawEmojiButton(canvas)
         drawLanguageButton(canvas)
+        drawSymbolsButton(canvas)
         if (words.isEmpty()) {
             drawToolbarButton(canvas, settingsWidth() * 1.5f, pressed = clipboardPressed) { x, y ->
                 drawClipboardGlyph(canvas, x, y)
@@ -604,6 +629,28 @@ class SuggestionStripView(context: Context) : View(context) {
     }
 
     /**
+     * The `?123` key, one square further in again.
+     *
+     * The honeycomb's bottom row gave its cell up so the row could be seven cells and sit a hex in
+     * from each edge; the symbols page still has to be reachable, and a mode key belongs beside the
+     * other mode keys rather than on the board.
+     */
+    private fun drawSymbolsButton(canvas: Canvas) {
+        drawToolbarButton(canvas, centerX = squareLeft(3 + micSquares()) + height / 2f, pressed = symbolsPressed) { x, y ->
+            textPaint.color = keyboardTheme.suggestionText
+            textPaint.typeface = Typeface.DEFAULT
+            textPaint.textSize = height * 0.30f
+            textPaint.getFontMetrics(reusableMetrics)
+            canvas.drawText(
+                "?123",
+                x,
+                y - (reusableMetrics.ascent + reusableMetrics.descent) / 2f,
+                textPaint,
+            )
+        }
+    }
+
+    /**
      * The microphone lives here rather than in the bottom key row, as in Gboard.
      *
      * The alternative is taking width from the space bar, which is the most-hit key on the
@@ -683,9 +730,12 @@ class SuggestionStripView(context: Context) : View(context) {
                 languagePressed =
                     !settingsPressed && !clipboardPressed && !editPressed && !micPressed &&
                         !emojiPressed && isOverLanguage(event.x)
+                symbolsPressed =
+                    !settingsPressed && !clipboardPressed && !editPressed && !micPressed &&
+                        !emojiPressed && !languagePressed && isOverSymbols(event.x)
                 val overButton =
                     settingsPressed || clipboardPressed || editPressed || micPressed ||
-                        emojiPressed || languagePressed
+                        emojiPressed || languagePressed || symbolsPressed
                 pressedIndex = if (overButton) -1 else indexAt(event.x)
                 longPressFired = false
                 if (pressedIndex >= 0) scheduleLongPress(pressedIndex)
@@ -714,7 +764,8 @@ class SuggestionStripView(context: Context) : View(context) {
                     !editPressed &&
                     !micPressed &&
                     !emojiPressed &&
-                    !languagePressed
+                    !languagePressed &&
+                    !symbolsPressed
                 ) {
                     if (!dragging && kotlin.math.abs(x - dragStartX) > dp(8f)) {
                         dragging = true
@@ -738,6 +789,7 @@ class SuggestionStripView(context: Context) : View(context) {
                 val stillOnMic = micPressed && isOverMic(x) && inBounds
                 val stillOnEmoji = emojiPressed && isOverEmoji(x) && inBounds
                 val stillOnLanguage = languagePressed && isOverLanguage(x) && inBounds
+                val stillOnSymbols = symbolsPressed && isOverSymbols(x) && inBounds
                 val stillOnWord = pressedIndex >= 0 && indexAt(x) == pressedIndex && inBounds
                 if (
                     settingsPressed != stillOnSettings ||
@@ -746,6 +798,7 @@ class SuggestionStripView(context: Context) : View(context) {
                     micPressed != stillOnMic ||
                     emojiPressed != stillOnEmoji ||
                     languagePressed != stillOnLanguage ||
+                    symbolsPressed != stillOnSymbols ||
                     (pressedIndex >= 0 && !stillOnWord)
                 ) {
                     settingsPressed = stillOnSettings
@@ -754,6 +807,7 @@ class SuggestionStripView(context: Context) : View(context) {
                     micPressed = stillOnMic
                     emojiPressed = stillOnEmoji
                     languagePressed = stillOnLanguage
+                    symbolsPressed = stillOnSymbols
                     if (!stillOnWord) {
                         pressedIndex = -1
                         cancelPendingLongPress()
@@ -805,6 +859,7 @@ class SuggestionStripView(context: Context) : View(context) {
         val mic = micPressed
         val emoji = emojiPressed
         val language = languagePressed
+        val symbols = symbolsPressed
         val held = longPressFired
         releasePress()
 
@@ -826,6 +881,9 @@ class SuggestionStripView(context: Context) : View(context) {
         } else if (language) {
             announceForAccessibility("Next language")
             listener?.onLanguageRequested()
+        } else if (symbols) {
+            announceForAccessibility("Symbols and numbers")
+            listener?.onSymbolsRequested()
         } else if (index in words.indices && !held) {
             announceForAccessibility("Suggestion ${words[index].word}")
             listener?.onSuggestionPicked(index, words[index].word)
@@ -842,6 +900,7 @@ class SuggestionStripView(context: Context) : View(context) {
         micPressed = false
         emojiPressed = false
         languagePressed = false
+        symbolsPressed = false
         cancelPendingLongPress()
         invalidate()
     }
@@ -878,6 +937,10 @@ class SuggestionStripView(context: Context) : View(context) {
     /** The language square, one further in again. */
     private fun isOverLanguage(x: Float): Boolean =
         x >= squareLeft(2 + micSquares()) && x < squareRight(2 + micSquares())
+
+    /** The symbols square, the innermost of the four on the right end. */
+    private fun isOverSymbols(x: Float): Boolean =
+        x >= squareLeft(3 + micSquares()) && x < squareRight(3 + micSquares())
 
     private fun isOverSettings(x: Float): Boolean = x >= 0f && x < settingsWidth()
 
@@ -997,6 +1060,7 @@ class SuggestionStripView(context: Context) : View(context) {
         const val A11Y_EDIT = 103
         const val A11Y_EMOJI = 104
         const val A11Y_LANGUAGE = 105
+        const val A11Y_SYMBOLS = 106
     }
 }
 
@@ -1029,10 +1093,10 @@ internal object SuggestionStripLayout {
     fun suggestionLeft(height: Float): Float = height.coerceAtLeast(0f)
 
     /**
-     * The trailing buttons' share of the strip: the emoji and the language squares always, the
+     * The trailing buttons' share of the strip: the emoji, language and symbols squares always, the
      * microphone's while voice is on. The candidate window reads it, and so does every hit test.
      */
-    fun trailingSquares(voiceEnabled: Boolean): Int = 2 + if (voiceEnabled) 1 else 0
+    fun trailingSquares(voiceEnabled: Boolean): Int = 3 + if (voiceEnabled) 1 else 0
 
     /** Left edge of the square [fromEdge] steps in from the right edge, counting the edge as 1. */
     fun squareLeft(width: Float, height: Float, fromEdge: Int): Float =
@@ -1043,9 +1107,9 @@ internal object SuggestionStripLayout {
         width - height.coerceAtLeast(0f) * (fromEdge - 1)
 
     /**
-     * [trailingSquares] counts the buttons after the candidates beyond the microphone: the emoji and
-     * language squares. Defaulted to none so a caller that carries only the microphone keeps the
-     * arithmetic it had.
+     * [trailingSquares] counts the buttons after the candidates beyond the microphone: the emoji,
+     * language and symbols squares. Defaulted to none so a caller that carries only the microphone
+     * keeps the arithmetic it had.
      */
     fun suggestionWidth(
         width: Float,

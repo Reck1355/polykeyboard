@@ -86,8 +86,8 @@ class HexSplitBoardTest {
         val left = leftHalf(board)
         val right = rightHalf(board)
 
-        assertEquals(listOf(5, 5, 4, 4), (0..3).map { row(left, it).size })
-        assertEquals(listOf(5, 4, 4, 4), (0..3).map { row(right, it).size })
+        assertEquals(listOf(5, 5, 4, 3), (0..3).map { row(left, it).size })
+        assertEquals(listOf(5, 4, 4, 3), (0..3).map { row(right, it).size })
 
         // Each half's own letters, in the order they are drawn.
         assertEquals(
@@ -243,24 +243,24 @@ class HexSplitBoardTest {
     }
 
     @Test
-    fun `portrait is untouched - one board, 10 9 8 7, the fused centred space, ratio 1_5`() {
+    fun `portrait is untouched - ten nine eight seven cells, the fused centred space, ratio 1_5`() {
         val board = portraitBoard()
 
         assertFalse(portrait.split)
         assertFalse(board.split)
         assertNull("portrait has no channel", board.channel)
 
-        assertEquals(listOf(10, 9, 8, 7), (0..3).map { row(board.keys, it).size })
+        assertEquals(listOf(10, 9, 8, 5), (0..3).map { row(board.keys, it).size })
 
         val offsets = HexBoard.rowOffsetsInCells(board.keys, board.cellWidth)
         assertEquals(4, offsets.size)
         assertEquals(0f, offsets[0], 0.0001f)
         assertEquals(0.5f, offsets[1], 0.0001f)
-        // The z-row is inset a cell at each end since caps and backspace left it, which puts it
-        // at 1.0: still exactly half a cell from the a-row and from the bottom row, which is what
-        // the honeycomb needs, and an even number of half-cells, so its phase is unmoved.
+        // The z-row is inset a cell at each end since backspace left it, and the bottom row a cell
+        // and a half since it came in from both edges. Each is exactly half a cell from the row
+        // above it, which is what the honeycomb needs.
         assertEquals(1f, offsets[2], 0.0001f)
-        assertEquals(0.5f, offsets[3], 0.0001f)
+        assertEquals(1.5f, offsets[3], 0.0001f)
 
         // One space, still the fused three-cell bar, still centred on the board.
         val all = spaces(board)
@@ -288,12 +288,12 @@ class HexSplitBoardTest {
         // Landscape is the split, before anything is rotated back.
         assertEquals(2, spaces(rotated).size)
         assertEquals(qwerty, letters(rotated.keys))
-        assertEquals(listOf(5, 5, 4, 4), (0..3).map { row(leftHalf(rotated), it).size })
-        assertEquals(listOf(5, 4, 4, 4), (0..3).map { row(rightHalf(rotated), it).size })
+        assertEquals(listOf(5, 5, 4, 3), (0..3).map { row(leftHalf(rotated), it).size })
+        assertEquals(listOf(5, 4, 4, 3), (0..3).map { row(rightHalf(rotated), it).size })
 
         // Portrait, before and after the rotation, is the same untouched board key for key — the split
         // did not leak into it.
-        assertEquals(listOf(10, 9, 8, 7), (0..3).map { row(portraitAfter.keys, it).size })
+        assertEquals(listOf(10, 9, 8, 5), (0..3).map { row(portraitAfter.keys, it).size })
         assertNull(portraitAfter.channel)
         assertEquals(1, spaces(portraitAfter).size)
         assertEquals(3f, spaces(portraitAfter).single().key.widthWeight, 0.0001f)

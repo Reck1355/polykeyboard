@@ -124,12 +124,14 @@ class HexAddressLayoutTest {
     }
 
     @Test
-    fun `the letters board keeps its comma and its emoji`() {
-        // The address rows give up the comma and the emoji to make room for the delimiter and `.com`.
-        // The letters board must not have given them up with them.
+    fun `the letters board keeps its comma and its period`() {
+        // The address rows give the comma's cell up to the delimiter and the period's to `.com`. The
+        // letters board must not have given either up with them: they are the row's two ends, and
+        // the enter and the backspace sit between them and the space bar.
         val bottom = Layouts.HexQwertyEn.rows.last().keys.map { it.outputText }
-        assertTrue(bottom.contains(","))
-        assertEquals("seven keys, the comma and the emoji among them", 7, Layouts.HexQwertyEn.rows.last().keys.size)
+        assertEquals("five keys, the comma first and the period last", 5, Layouts.HexQwertyEn.rows.last().keys.size)
+        assertEquals(",", bottom.first())
+        assertEquals(".", bottom.last())
     }
 
     @Test
