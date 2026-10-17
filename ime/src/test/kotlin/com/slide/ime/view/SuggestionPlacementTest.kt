@@ -45,6 +45,15 @@ class SuggestionPlacementTest {
     fun `disabling voice gives its control width back to suggestions`() {
         assertEquals(264f, SuggestionStripLayout.suggestionWidth(360f, 48f, voiceEnabled = true))
         assertEquals(312f, SuggestionStripLayout.suggestionWidth(360f, 48f, voiceEnabled = false))
+        // The strip the keyboard actually draws: the settings square at the left and four to the
+        // right of the candidates - emoji, language, symbols and the microphone. Five squares, and
+        // the arithmetic has to agree with the drawing or a column of the strip is invisible.
+        val trailing = SuggestionStripLayout.trailingSquares(voiceEnabled = true)
+        assertEquals("emoji, language, symbols, microphone", 4, trailing)
+        assertEquals(
+            360f - 48f * 5,
+            SuggestionStripLayout.suggestionWidth(360f, 48f, voiceEnabled = true, trailingSquares = trailing),
+        )
         assertEquals(
             2,
             SuggestionStripLayout.slotAt(340f, 360f, 48f, voiceEnabled = false, slotCount = 3),
@@ -56,17 +65,23 @@ class SuggestionPlacementTest {
         // The strip carries the two buttons the boards gave up. They are on it in every state, so
         // the candidate window is what gives way, and the window's right edge is exactly where the
         // language button's square begins: a point on a button is never read as a candidate.
+        // Two trailing squares plus the settings square at the left: three of the strip's eight
+        // forty-eight-pixel squares, so the candidates keep five. 168f here was four squares - the
+        // count that put an ellipsis in every candidate on his phone, because the microphone was
+        // being reserved once in this call and once more inside the arithmetic.
         assertEquals(
-            168f,
+            216f,
             SuggestionStripLayout.suggestionWidth(360f, 48f, voiceEnabled = true, trailingSquares = 2),
         )
         assertEquals(
             216f,
             SuggestionStripLayout.suggestionWidth(360f, 48f, voiceEnabled = false, trailingSquares = 2),
         )
+        // 216f is the width the candidates keep; the window's right edge is 48 + 216 = 264f, which
+        // is where the first button begins.
         assertNull(
             SuggestionStripLayout.slotAt(
-                216f, 360f, 48f, voiceEnabled = true, slotCount = 3, trailingSquares = 2,
+                264f, 360f, 48f, voiceEnabled = true, slotCount = 3, trailingSquares = 2,
             ),
         )
         assertEquals(

@@ -600,23 +600,30 @@ object Layouts {
                 HEX_ROW_OFFSET,
             ),
             KeyRow(
+                // Eight keys, not nine: the quote and the apostrophe share one key, as on Gboard,
+                // so the row can come in a hex a side like the letters board's does. The row above
+                // starts half a cell in, this one a whole cell, and the bottom row one and a half,
+                // which is the ladder the honeycomb is laid out on.
                 listOf(toSymbolsAlt.copy(widthWeight = 1f)) +
-                    listOf(sym("*"), sym("\""), sym("'"), sym(":"), sym(";"), sym("!"), sym("?")) +
+                    listOf(sym("*"), sym("'", "\""), sym(":"), sym(";"), sym("!"), sym("?")) +
                     listOf(delete.copy(widthWeight = 1f)),
+                leadingGap = 1f,
+                trailingGap = 1f,
             ),
             KeyRow(
-                // Same nine cells, with the globe and the emoji key gone to the strip above. Space
-                // takes what they left: a wide bar is no bad thing on the page where the letters
-                // are the thing you are reaching back for.
+                // The letters board's own bottom row, key for key, with the `ABC` where its comma
+                // sits and the comma where its caps sits: five keys over seven cells, centred, and
+                // the space bar over three of them rather than five. The page is a page of the same
+                // keyboard, so its space bar is the same size as the one the thumbs already know.
                 listOf(
                     toAlpha.copy(widthWeight = 1f),
                     comma,
-                    space.copy(widthWeight = 5f),
+                    space.copy(widthWeight = 3f),
                     period,
                     enter.copy(widthWeight = 1f),
                 ),
-                HEX_ROW_OFFSET,
-                HEX_ROW_OFFSET,
+                leadingGap = 1.5f,
+                trailingGap = 1.5f,
             ),
         ),
     )
@@ -650,20 +657,23 @@ object Layouts {
                 HEX_ROW_OFFSET,
             ),
             KeyRow(
+                // The brackets share one key, for the reason the apostrophe does on the first page.
                 listOf(toSymbols.copy(widthWeight = 1f)) +
-                    listOf(sym("%", "‰"), sym("©"), sym("_"), sym("™"), sym("✓"), sym("["), sym("]")) +
+                    listOf(sym("%", "‰"), sym("©"), sym("_"), sym("™"), sym("✓"), sym("[", "]")) +
                     listOf(delete.copy(widthWeight = 1f)),
+                leadingGap = 1f,
+                trailingGap = 1f,
             ),
             KeyRow(
                 listOf(
                     toAlpha.copy(widthWeight = 1f),
                     sym("<", "‹«"),
-                    space.copy(widthWeight = 5f),
+                    space.copy(widthWeight = 3f),
                     sym(">", "›»"),
                     enter.copy(widthWeight = 1f),
                 ),
-                HEX_ROW_OFFSET,
-                HEX_ROW_OFFSET,
+                leadingGap = 1.5f,
+                trailingGap = 1.5f,
             ),
         ),
     )

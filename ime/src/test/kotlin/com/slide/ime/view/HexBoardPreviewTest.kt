@@ -43,6 +43,13 @@ class HexBoardPreviewTest {
         val width: Float,
         val available: Float,
         val layout: KeyboardLayout,
+        /**
+         * The key that board's bottom row is expected to carry besides the space bar.
+         *
+         * The letters board and the browser's board carry the backspace there; a symbols page
+         * carries the way back to the letters instead, which is the key he asked for on it.
+         */
+        val bottomRowCarries: com.slide.core.layout.KeyType = com.slide.core.layout.KeyType.DELETE,
     )
 
     private val shots = listOf(
@@ -59,6 +66,16 @@ class HexBoardPreviewTest {
         // ever gets a board of its own again - and the address row that did have no backspace on it -
         // this picture is what fails first.
         Shot("portrait-browser", HexBoard.Orientation.PORTRAIT, 1080f, 2000f, Layouts.HexEmailEn),
+        // The `?123` page, drawn because he reported two things about it in one breath: the symbols
+        // key should turn back into letters, and its space bar should be three hexagons and not five.
+        Shot(
+            name = "portrait-symbols",
+            orientation = HexBoard.Orientation.PORTRAIT,
+            width = 1080f,
+            available = 2000f,
+            layout = Layouts.HexSymbolsEn,
+            bottomRowCarries = com.slide.core.layout.KeyType.ALPHA,
+        ),
     )
 
     @Test
@@ -81,8 +98,8 @@ class HexBoardPreviewTest {
             // than at the end of the letters, and the board's own name on the space bar.
             val bottom = placement.keys.filter { it.row == placement.keys.maxOf { k -> k.row } }
             assertTrue(
-                "${shot.name}: backspace is drawn on the bottom row",
-                bottom.any { it.key.type == com.slide.core.layout.KeyType.DELETE },
+                "${shot.name}: the bottom row carries its own key, ${shot.bottomRowCarries}",
+                bottom.any { it.key.type == shot.bottomRowCarries },
             )
             assertTrue(
                 "${shot.name}: the space bar is drawn",

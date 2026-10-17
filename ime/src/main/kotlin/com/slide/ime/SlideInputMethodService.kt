@@ -2854,8 +2854,14 @@ class SlideInputMethodService :
      * and this is that call: the bottom row gave its cell up so the row could be seven cells wide,
      * and the page it opened is still one tap away, above the board rather than on it.
      */
+    /**
+     * The strip's right-end square: `?123` while the letters are up, `ABC` while a symbols page is.
+     *
+     * One button that goes to whichever page it is not showing, which is what he asked for and what
+     * the key does everywhere else he has typed.
+     */
     override fun onSymbolsRequested() {
-        switchLayer(Layer.SYMBOLS)
+        switchLayer(if (layer == Layer.ALPHA) Layer.SYMBOLS else Layer.ALPHA)
     }
 
     override fun onVoiceRequested() {
@@ -3841,6 +3847,7 @@ class SlideInputMethodService :
         gestureKeyMapCache = null
         if (target != Layer.ALPHA) setShift(ShiftState.OFF)
         keyboardView?.keyboardLayout = layoutFor(target)
+        suggestionStrip?.lettersPageOffered = target != Layer.ALPHA
         if (target == Layer.ALPHA) {
             if (preservedCapsLock) setShift(ShiftState.LOCKED) else updateShiftFromCursor()
         }

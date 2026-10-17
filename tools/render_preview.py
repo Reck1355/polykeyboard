@@ -76,9 +76,11 @@ if __name__ == "__main__":
     names = sys.argv[1:] or ["portrait", "landscape"]
     for n in names:
         im = raster(n)
-        if n == "portrait":
-            im.save(HERE / "send-portrait.png")
-        else:
+        if n == "landscape":
             scale = 1500 / im.size[0]
             im.resize((1500, int(im.size[1] * scale)), Image.LANCZOS).save(HERE / "send-landscape.png")
+        else:
+            # Every other name, `portrait-symbols` included, writes `send-<name>.png`. The closing
+            # print used to name a file this branch never wrote, which is a trap for the next reader.
+            im.save(HERE / f"send-{n}.png")
     print("wrote", ", ".join(f"send-{n}.png" for n in names))

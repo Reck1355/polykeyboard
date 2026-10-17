@@ -30,12 +30,16 @@ class SymbolPagesTest {
 
     @Test
     fun `both hex pages are honeycombs on the letters board's own cell counts`() {
-        val expectedCells = listOf(10, 9, 9, 9)
+        // The letters board's ladder, not one of the pages' own: ten, nine, eight, seven cells, each
+        // row half a cell in from the one above and centred on the same midline the space bar sits
+        // on. The pages used to be 10 / 9 / 9 / 9, which left the second row off centre and the third
+        // one ragged against no edge in particular.
+        val expectedCells = listOf(10, 9, 8, 7)
         for (page in listOf(Layouts.HexSymbolsEn, Layouts.HexSymbolsAltEn)) {
             assertTrue("${page.id} is a hex board", page.hexKeys)
             assertFalse("${page.id} has no number row to insert", page.supportsNumberRow)
             assertEquals(
-                "${page.id}: four rows of ten, ten, nine and nine cells",
+                "${page.id}: four rows of ten, nine, eight and seven cells",
                 expectedCells,
                 page.rows.map { row -> row.keys.sumOf { it.widthWeight.roundToInt() } },
             )
@@ -49,9 +53,10 @@ class SymbolPagesTest {
                 .flatMap { it.keys }
                 .filter { it.widthWeight != 1f }
                 .map { it.type to it.widthWeight.roundToInt() }
-            // Five cells, not three: the globe and the emoji key left the row for the strip, and
-            // the page still covers its nine, so the space bar carries what they gave up.
-            assertEquals("${page.id}: one wide key, the space bar", listOf(KeyType.SPACE to 5), wide)
+            // Three cells, the same as the letters board's: a page of this keyboard is a page of
+            // this keyboard, and the space bar is the key the thumb finds without looking. He
+            // reported it as *in symbols its space bar is more than three hexagons*.
+            assertEquals("${page.id}: one wide key, the space bar over three cells", listOf(KeyType.SPACE to 3), wide)
         }
     }
 
@@ -83,33 +88,40 @@ class SymbolPagesTest {
         }
     }
 
+    /**
+     * Every character a key types, its alternates included.
+     *
+     * Two characters share a key where the row has one cell fewer than the characters it carries -
+     * the quote with the apostrophe, the closing bracket with the opening one - so a page's
+     * vocabulary is what its keys type *including* what a hold on them reaches.
+     */
+    private fun vocabularyOf(page: KeyboardLayout): Set<String> = page.rows
+        .flatMap { it.keys }
+        .flatMap { key -> listOf(key.outputText) + key.alternates }
+        .toSet()
+
     @Test
     fun `the second hex page still carries the characters that are hard to find`() {
-        val all = Layouts.HexSymbolsAltEn.rows.flatMap { it.keys }.map { it.outputText }.toSet()
+        val all = vocabularyOf(Layouts.HexSymbolsAltEn)
         for (character in listOf("~", "|", "=", "{", "}", "\\", "£", "€", "[", "]", "<", ">", "%")) {
             assertTrue("the second hex page types $character", character in all)
         }
     }
 
     @Test
-    fun `every character the first hex page gives up is still typed on the second`() {
-        // The honeycomb's rows hold one cell fewer than the stock page's wide-key rows, so exactly
-        // one character moves between them. It has to still exist somewhere: a symbol quietly
-        // vanishing to make a layout fit is the kind of change nobody notices until they need it.
-        val first = Layouts.HexSymbolsEn.rows.flatMap { it.keys }.map { it.outputText }.toSet()
-        val second = Layouts.HexSymbolsAltEn.rows.flatMap { it.keys }.map { it.outputText }.toSet()
-        val stockFirst = Layouts.SymbolsEn.rows.flatMap { it.keys }
-            .map { it.outputText }.filter { it.isNotEmpty() }.toSet()
-        val dropped = stockFirst - first
-        assertTrue(
-            "the first page gave up something: $dropped",
-            dropped.isNotEmpty(),
-        )
-        for (character in dropped) {
-            assertTrue(
-                "$character left the first hex page and is not on the second either",
-                character in second,
-            )
-        }
+    fun `every character the stock first page types is still typeable on the two hex pages`() {
+        // The honeycomb's rows are narrower than the stock page's, so characters move between the two
+        // pages and some share a key. A symbol quietly vanishing to make a layout fit is the kind of
+        // change nobody notices until they need it, so this reads the two hex pages - one or the
+        // other, on a key or on a hold - and requires every character the stock page leads with to be
+        // in there. The reverse is not required: the hex pages carry more than the stock page does.
+        val reachable = vocabularyOf(Layouts.HexSymbolsEn) + vocabularyOf(Layouts.HexSymbolsAltEn)
+        val stockFirst = Layouts.SymbolsEn.rows
+            .flatMap { it.keys }
+            .flatMap { key -> listOf(key.outputText) + key.alternates }
+            .filter { it.isNotEmpty() }
+            .toSet()
+        val missing = stockFirst - reachable
+        assertEquals("characters the stock page types and the hex pages do not: $missing", emptySet<String>(), missing)
     }
 }

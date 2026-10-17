@@ -89,6 +89,24 @@ class SuggestionStripView(context: Context) : View(context) {
             invalidate()
         }
 
+    /**
+     * Whether the board on screen is a symbols page rather than the letters.
+     *
+     * The square at the strip's right end is one button, not two: `?123` while the letters are up,
+     * `ABC` while a symbols page is, and tapping it goes to whichever page it is not showing. He
+     * asked for exactly that - *in symbols the symbols key needs to turn back into letters so i can
+     * switch easily* - and it is what the key does on every other keyboard he has used, so the way
+     * back is the way in.
+     */
+    var lettersPageOffered: Boolean = false
+        set(value) {
+            if (field == value) return
+            field = value
+            symbolsPressed = false
+            refreshAccessibilityDescription()
+            invalidate()
+        }
+
     private val density = resources.displayMetrics.density
     private fun dp(value: Float) = value * density
     private fun sp(value: Float) =
@@ -242,7 +260,8 @@ class SuggestionStripView(context: Context) : View(context) {
                 return
             }
             if (virtualViewId == A11Y_SYMBOLS) {
-                node.contentDescription = "Symbols and numbers"
+                node.contentDescription =
+                    if (lettersPageOffered) "Letters" else "Symbols and numbers"
                 node.setBoundsInParent(
                     Rect(
                         squareLeft(3 + micSquares()).toInt(),
@@ -636,13 +655,14 @@ class SuggestionStripView(context: Context) : View(context) {
      * other mode keys rather than on the board.
      */
     private fun drawSymbolsButton(canvas: Canvas) {
+        val label = if (lettersPageOffered) "ABC" else "?123"
         drawToolbarButton(canvas, centerX = squareLeft(3 + micSquares()) + height / 2f, pressed = symbolsPressed) { x, y ->
             textPaint.color = keyboardTheme.suggestionText
             textPaint.typeface = Typeface.DEFAULT
             textPaint.textSize = height * 0.30f
             textPaint.getFontMetrics(reusableMetrics)
             canvas.drawText(
-                "?123",
+                label,
                 x,
                 y - (reusableMetrics.ascent + reusableMetrics.descent) / 2f,
                 textPaint,
@@ -1107,18 +1127,25 @@ internal object SuggestionStripLayout {
         width - height.coerceAtLeast(0f) * (fromEdge - 1)
 
     /**
-     * [trailingSquares] counts the buttons after the candidates beyond the microphone: the emoji,
-     * language and symbols squares. Defaulted to none so a caller that carries only the microphone
-     * keeps the arithmetic it had.
+     * [trailingSquares] counts every square to the right of the candidates, the microphone included,
+     * and the one square this adds back is the settings button at the left. It defaults to the
+     * microphone alone when voice is on and to none when it is off, so a strip that carries no emoji,
+     * language or symbols button keeps the arithmetic it had.
+     *
+     * The microphone must be counted once. It was counted twice - once here and once in the
+     * `trailingSquares` the strip passes, which carries it - so the strip reserved six squares where
+     * it draws five, and the candidates lost a square of width to a gap. On his phone that is what
+     * turned every suggestion into an ellipsis: three candidates were sharing 374 px, a hundred and
+     * twenty-five each, and a word drawn into ninety-five px of them is `...`.
      */
     fun suggestionWidth(
         width: Float,
         height: Float,
         voiceEnabled: Boolean,
-        trailingSquares: Int = 0,
+        trailingSquares: Int = if (voiceEnabled) 1 else 0,
     ): Float = (
         width -
-            height.coerceAtLeast(0f) * ((if (voiceEnabled) 2f else 1f) + trailingSquares)
+            height.coerceAtLeast(0f) * (1f + trailingSquares)
         ).coerceAtLeast(0f)
 
     fun slotAt(
@@ -1127,7 +1154,7 @@ internal object SuggestionStripLayout {
         height: Float,
         voiceEnabled: Boolean,
         slotCount: Int,
-        trailingSquares: Int = 0,
+        trailingSquares: Int = if (voiceEnabled) 1 else 0,
     ): Int? {
         if (slotCount <= 0) return null
         val left = suggestionLeft(height)
