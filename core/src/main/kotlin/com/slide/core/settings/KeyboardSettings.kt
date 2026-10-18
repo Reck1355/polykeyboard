@@ -99,6 +99,17 @@ data class KeyboardSettings(
      */
     val keyboardSizeStep: Int = KeyboardSize.DEFAULT_STEP,
     /**
+     * The keyboard-size ladder stop for landscape, on the same ladder as [keyboardSizeStep].
+     *
+     * The two orientations spend a step differently: portrait has no width left to give, so its
+     * hexagons grow taller, while landscape multiplies its share of the display height and sends its
+     * two halves further in. One stop for both meant tuning one board moved the other, so each keeps
+     * its own and a thumb can have a compact portrait board and a wide landscape one at once. Both
+     * default to [KeyboardSize.DEFAULT_STEP], the board as it was approved, so a keyboard nobody has
+     * asked to resize still draws exactly what it drew before.
+     */
+    val keyboardSizeStepLandscape: Int = KeyboardSize.DEFAULT_STEP,
+    /**
      * Where the portrait board sits, in dp. Positive floats it up off the bottom edge; negative drops it
      * below where it would otherwise sit, by leaving the room above it instead.
      *
@@ -631,6 +642,7 @@ private object Keys {
     val NUMBER_ROW = booleanPreferencesKey("number_row")
     val KEY_HEIGHT = floatPreferencesKey("key_height_scale")
     val KEYBOARD_SIZE_STEP = intPreferencesKey("keyboard_size_step")
+    val KEYBOARD_SIZE_STEP_LANDSCAPE = intPreferencesKey("keyboard_size_step_landscape")
     val PORTRAIT_BOARD_OFFSET = floatPreferencesKey("portrait_board_offset_dp")
     val LANDSCAPE_BOARD_OFFSET = floatPreferencesKey("landscape_board_offset_dp")
 
@@ -687,6 +699,7 @@ internal fun MutablePreferences.writeKeyboardSettings(updated: KeyboardSettings)
     this[Keys.NUMBER_ROW] = updated.showNumberRow
     this[Keys.KEY_HEIGHT] = updated.keyHeightScale
     this[Keys.KEYBOARD_SIZE_STEP] = updated.keyboardSizeStep
+    this[Keys.KEYBOARD_SIZE_STEP_LANDSCAPE] = updated.keyboardSizeStepLandscape
     this[Keys.PORTRAIT_BOARD_OFFSET] = updated.portraitBoardOffsetDp
     this[Keys.LANDSCAPE_BOARD_OFFSET] = updated.landscapeBoardOffsetDp
     this[Keys.HAPTIC] = updated.hapticEnabled
@@ -723,6 +736,11 @@ internal fun Preferences.toKeyboardSettings(): KeyboardSettings {
         showNumberRow = this[Keys.NUMBER_ROW] ?: defaults.showNumberRow,
         keyHeightScale = boundedFloat(Keys.KEY_HEIGHT, defaults.keyHeightScale, 0.7f..1.4f),
         keyboardSizeStep = boundedInt(Keys.KEYBOARD_SIZE_STEP, defaults.keyboardSizeStep, KeyboardSize.STEPS),
+        keyboardSizeStepLandscape = boundedInt(
+            Keys.KEYBOARD_SIZE_STEP_LANDSCAPE,
+            defaults.keyboardSizeStepLandscape,
+            KeyboardSize.STEPS,
+        ),
         // An install from before the split has one number and no orientation; it seeds both, so the
         // space that was chosen for gesture-nav comfort is not silently thrown away on the update.
         portraitBoardOffsetDp = boardOffset(Keys.PORTRAIT_BOARD_OFFSET),

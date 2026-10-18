@@ -152,7 +152,9 @@ private fun SetupScreen(repository: SettingsRepository) {
 
     // Sliders update visually under the finger and persist once the gesture settles. Writing
     // DataStore on every pixel of movement makes an otherwise simple settings screen feel laggy.
-    var keyHeight by remember(settings.keyHeightScale) { mutableFloatStateOf(settings.keyHeightScale) }
+    var landscapeSizeStep by remember(settings.keyboardSizeStepLandscape) {
+        mutableIntStateOf(settings.keyboardSizeStepLandscape)
+    }
     // The keyboard-size stop moves under the finger and persists once the gesture settles, like the
     // other sliders. It is a ladder position, not a size, so the state is the integer the setting
     // stores and the geometry derives everything else from it.
@@ -402,32 +404,38 @@ private fun SetupScreen(repository: SettingsRepository) {
                 }
             }
 
-            Card(Modifier.fillMaxWidth()) {
-                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text("Languages", style = MaterialTheme.typography.titleMedium)
-                    Text(
-                        "Which language the keyboard types in. The globe key on the board cycles " +
-                            "these, and both write the same choice, so the keyboard and this card " +
-                            "never disagree about it.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        KeyboardLanguages.SWITCHABLE.forEach { entry ->
-                            // Nothing has been chosen until a tag is stored, so a fresh install shows
-                            // no chip selected rather than claiming a language the keyboard picked
-                            // for itself.
-                            val selected = settings.languageTag.isNotEmpty() &&
-                                KeyboardLanguages.resolve(settings.languageTag) == entry.language
-                            LanguageChip(
-                                label = entry.label,
-                                selected = selected,
-                                onClick = {
-                                    scope.launch {
-                                        repository.update { it.copy(languageTag = entry.tag) }
-                                    }
-                                },
-                            )
+            // Shown only when there is something to switch between. A build that ships one language
+            // would otherwise carry a card whose only chip cannot act: nothing to choose, nothing to
+            // change, and the globe key has nowhere to go either. The slim build is exactly that
+            // build, so the card is absent rather than empty.
+            if (KeyboardLanguages.SWITCHABLE.size > 1) {
+                Card(Modifier.fillMaxWidth()) {
+                    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Text("Languages", style = MaterialTheme.typography.titleMedium)
+                        Text(
+                            "Which language the keyboard types in. The globe key on the board cycles " +
+                                "these, and both write the same choice, so the keyboard and this card " +
+                                "never disagree about it.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            KeyboardLanguages.SWITCHABLE.forEach { entry ->
+                                // Nothing has been chosen until a tag is stored, so a fresh install shows
+                                // no chip selected rather than claiming a language the keyboard picked
+                                // for itself.
+                                val selected = settings.languageTag.isNotEmpty() &&
+                                    KeyboardLanguages.resolve(settings.languageTag) == entry.language
+                                LanguageChip(
+                                    label = entry.label,
+                                    selected = selected,
+                                    onClick = {
+                                        scope.launch {
+                                            repository.update { it.copy(languageTag = entry.tag) }
+                                        }
+                                    },
+                                )
+                            }
                         }
                     }
                 }
@@ -475,7 +483,7 @@ private fun SetupScreen(repository: SettingsRepository) {
                         scope.launch { repository.update { it.copy(doubleSpacePeriod = value) } }
                     }
                     SettingSlider(
-                        label = "Keyboard size",
+                        label = "Keyboard size, portrait",
                         value = keyboardSizeStep.toFloat(),
                         valueLabel = keyboardSizeLabel(keyboardSizeStep),
                         valueRange = KeyboardSize.MIN_STEP.toFloat()..KeyboardSize.MAX_STEP.toFloat(),
@@ -488,17 +496,38 @@ private fun SetupScreen(repository: SettingsRepository) {
                             }
                         },
                     )
+                    SettingSlider(
+                        label = "Keyboard size, landscape",
+                        value = landscapeSizeStep.toFloat(),
+                        valueLabel = keyboardSizeLabel(landscapeSizeStep),
+                        valueRange = KeyboardSize.MIN_STEP.toFloat()..KeyboardSize.MAX_STEP.toFloat(),
+                        steps = KeyboardSize.MAX_STEP - KeyboardSize.MIN_STEP - 1,
+                        onValueChange = { landscapeSizeStep = it.roundToInt() },
+                        onValueChangeFinished = {
+                            scope.launch {
+                                repository.update {
+                                    it.copy(keyboardSizeStepLandscape = landscapeSizeStep)
+                                }
+                            }
+                        },
+                    )
                     Text(
-                        "Resizes the hex board itself. Portrait has the whole width already, so its " +
+                        "Resizes the hex board itself, one ladder per orientation, so the board you " +
+                            "type on in landscape can be a different size from the one you type on " +
+                            "holding the phone upright. Portrait has the whole width already, so its " +
                             "hexagons grow taller; landscape takes more of the screen, so the two " +
-                            "halves reach further in. Default draws the board as it was approved.",
+                            "halves reach further in. Default draws each board as it was approved.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                     // The preview resolves its colours the way the Colours screen does — through the
                     // one stored choice — and asks the board's own geometry for its shape, so what
                     // is shown is the board the keyboard will draw, not a picture of one.
-                    KeyboardSizePreview(step = keyboardSizeStep, colours = boardColours)
+                    KeyboardSizePreview(
+                        portraitStep = keyboardSizeStep,
+                        landscapeStep = landscapeSizeStep,
+                        colours = boardColours,
+                    )
                     // The one stock control the hex board cannot answer sits under a heading that
                     // says so: the honeycomb has no number row, so its digits live behind ?123, and
                     // until this heading existed the control sat beside the ones that do work with
@@ -529,27 +558,6 @@ private fun SetupScreen(repository: SettingsRepository) {
                     ) { value ->
                         scope.launch { repository.update { it.copy(showNumberRow = value) } }
                     }
-                    SettingSlider(
-                        label = "Keyboard height",
-                        value = keyHeight,
-                        valueLabel = "${(keyHeight * 100).roundToInt()}%",
-                        valueRange = 0.7f..1.4f,
-                        steps = 6,
-                        // Above 100% there is nothing left for it to do on the honeycomb: the keys
-                        // already span the screen's width, so a taller frame was only empty space
-                        // above the board. It stays enabled because it is the control that makes the
-                        // keys smaller, and the reason is on the screen rather than in a guess. The
-                        // size ladder is what makes them larger.
-                        description = "Above 100% the honeycomb cannot get bigger: the keys already " +
-                            "span the screen's width. Use Keyboard size to make them larger, or this " +
-                            "one to make them smaller.",
-                        onValueChange = { keyHeight = it },
-                        onValueChangeFinished = {
-                            scope.launch {
-                                repository.update { it.copy(keyHeightScale = keyHeight) }
-                            }
-                        },
-                    )
                     SettingSlider(
                         label = "Portrait placement",
                         value = portraitPlacement,
@@ -1110,18 +1118,18 @@ private fun PalettePreview(colours: List<Int>, size: Dp) {
  * height is what the step multiplies, so its board visibly takes more of the width it is fitted to.
  */
 @Composable
-private fun KeyboardSizePreview(step: Int, colours: KeyboardColours) {
+private fun KeyboardSizePreview(portraitStep: Int, landscapeStep: Int, colours: KeyboardColours) {
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         BoardPreview(
             label = "Portrait",
-            sizing = HexBoard.sizing(HexBoard.Orientation.PORTRAIT, step),
+            sizing = HexBoard.sizing(HexBoard.Orientation.PORTRAIT, portraitStep),
             displayWidth = PORTRAIT_PREVIEW_WIDTH,
             displayHeight = PORTRAIT_PREVIEW_HEIGHT,
             colours = colours,
         )
         BoardPreview(
             label = "Landscape",
-            sizing = HexBoard.sizing(HexBoard.Orientation.LANDSCAPE, step),
+            sizing = HexBoard.sizing(HexBoard.Orientation.LANDSCAPE, landscapeStep),
             displayWidth = LANDSCAPE_PREVIEW_WIDTH,
             displayHeight = LANDSCAPE_PREVIEW_HEIGHT,
             colours = colours,

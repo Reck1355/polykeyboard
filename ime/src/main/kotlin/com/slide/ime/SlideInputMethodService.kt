@@ -556,7 +556,8 @@ class SlideInputMethodService :
                     // The keyboard-size step redraws the board, so it invalidates the gesture map's
                     // cached geometry exactly as a height change does: without it a gesture that
                     // started before a resize would be scored against the old hexagon positions.
-                    previous.keyboardSizeStep != updated.keyboardSizeStep
+                    previous.keyboardSizeStep != updated.keyboardSizeStep ||
+                    previous.keyboardSizeStepLandscape != updated.keyboardSizeStepLandscape
                 ) {
                     gestureKeyMapCache = null
                 }

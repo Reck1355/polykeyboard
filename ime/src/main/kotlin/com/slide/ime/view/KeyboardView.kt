@@ -112,7 +112,8 @@ class KeyboardView @JvmOverloads constructor(
                 // The keyboard-size ladder resizes the hex board, so a step change has to re-measure
                 // as surely as a height change: without this the new size would wait for some
                 // unrelated layout pass, which reads as the slider having done nothing.
-                field.keyboardSizeStep != value.keyboardSizeStep
+                field.keyboardSizeStep != value.keyboardSizeStep ||
+                field.keyboardSizeStepLandscape != value.keyboardSizeStepLandscape
             field = value
             if (heightChanged) requestLayout()
             invalidate()
@@ -528,9 +529,23 @@ class KeyboardView @JvmOverloads constructor(
             HexBoard.Orientation.PORTRAIT
         }
 
-    /** The sizing the board is measured and placed at, at the user's keyboard-size stop. */
-    private fun hexSizing(): HexBoard.Sizing =
-        HexBoard.sizing(hexOrientation(), settings.keyboardSizeStep)
+    /**
+     * The sizing the board is measured and placed at, resolved from the stop that belongs to the
+     * orientation on screen.
+     *
+     * The two orientations keep separate stops because a step spends them differently: portrait's
+     * hexagons grow taller while landscape takes more of the display height, so one number for both
+     * meant tuning one board moved the other.
+     */
+    private fun hexSizing(): HexBoard.Sizing {
+        val orientation = hexOrientation()
+        val step = if (orientation == HexBoard.Orientation.LANDSCAPE) {
+            settings.keyboardSizeStepLandscape
+        } else {
+            settings.keyboardSizeStep
+        }
+        return HexBoard.sizing(orientation, step)
+    }
 
     override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
         val width = MeasureSpec.getSize(widthMeasureSpec)
