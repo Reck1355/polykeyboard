@@ -440,6 +440,10 @@ class KeyboardSettingsTest {
             doubleSpacePeriod = false,
             emojiSkinTone = 3,
             keyboardSizeStep = KeyboardSize.MAX_STEP,
+            // The landscape ladder is a separate stop on purpose, so it is varied to a different
+            // stop again: a test that set both to the same value could pass while the two were
+            // wired to one key.
+            keyboardSizeStepLandscape = KeyboardSize.MIN_STEP,
             updateChecksEnabled = true,
             includeAlphaUpdates = true,
             micButtonEnabled = false,

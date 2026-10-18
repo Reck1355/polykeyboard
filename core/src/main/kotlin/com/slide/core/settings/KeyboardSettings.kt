@@ -322,7 +322,7 @@ internal fun isBackupEligibleSetting(name: String, value: Any): Boolean = when (
     "bottom_padding_dp" -> value is Float
     "colour_seed_hue", "colour_seed_saturation", "colour_seed_lightness" -> value is Float
     "learned_data_clear_epoch" -> value is Long
-    "emoji_skin_tone", "keyboard_size_step" -> value is Int
+    "emoji_skin_tone", "keyboard_size_step", "keyboard_size_step_landscape" -> value is Int
     "follow_system_dark",
     "key_borders",
     "key_preview",
