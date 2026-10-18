@@ -20,6 +20,16 @@ where those additions are published.
   Polykeyboard types in **English and Spanish** today; more languages are to come.
 - Offline **voice typing**, carried over from Slide and still entirely on-device.
 
+**What it looks like**
+
+<p align="center">
+  <img src="docs/screenshots/portrait-honeycomb.jpg" width="42%" alt="Polykeyboard in portrait: hexagonal keys on a honeycomb lattice, the jade palette">
+  <img src="docs/screenshots/landscape-split.jpg" width="55%" alt="Polykeyboard in landscape: the two-handed split layout">
+</p>
+
+Portrait runs the letters across the full width; landscape splits the board in two so both thumbs
+type, with the space bar handed to each of them.
+
 Typing and voice recognition work without a network connection; the optional GitHub update
 checker is the app's only network feature.
 
@@ -40,8 +50,15 @@ Polykeyboard release also installs beside any Slide build rather than fighting i
 slot. Releases before 0.1.11 were preview builds under the standard Android debug key and a
 different package name; they install side by side with these and can be removed at any time.
 
-The download is large, currently around 245 MB, and almost all of it is the Whisper model
-that makes dictation work with no network. There is no smaller build yet.
+There are two builds on each release, and the difference is only voice typing.
+
+- **Polykeyboard Slim** — about 23 MB. Everything in the list above except dictation: the hex
+  keys, gesture typing, colours, emoji, English. This is the one to hand to someone.
+- **Polykeyboard** — about 221 MB, almost all of it the Whisper model that makes dictation work
+  with no network, plus the Mandarin board.
+
+They share the same package name, so installing one replaces the other rather than sitting beside
+it; pick the one you want and reinstall if you change your mind.
 
 Update checks are off by default. If enabled in Polykeyboard's settings, the app checks public GitHub
 releases (including prereleases when selected). It verifies the selected asset's published
