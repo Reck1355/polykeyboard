@@ -604,23 +604,28 @@ object Layouts {
                 // so the row can come in a hex a side like the letters board's does. The row above
                 // starts half a cell in, this one a whole cell, and the bottom row one and a half,
                 // which is the ladder the honeycomb is laid out on.
+                //
+                // The eight keys match the letters board's third row key for key: the page's
+                // mode key first, six symbols, and the period in the last cell, exactly where the
+                // letters board keeps its period. The backspace leaves this row for the bottom row's
+                // right end, so both boards finish their bottom row the same way.
                 listOf(toSymbolsAlt.copy(widthWeight = 1f)) +
                     listOf(sym("*"), sym("'", "\""), sym(":"), sym(";"), sym("!"), sym("?")) +
-                    listOf(delete.copy(widthWeight = 1f)),
+                    listOf(period.copy(widthWeight = 1f)),
                 leadingGap = 1f,
                 trailingGap = 1f,
             ),
             KeyRow(
-                // The letters board's own bottom row, key for key, with the `ABC` where its comma
-                // sits and the comma where its caps sits: five keys over seven cells, centred, and
-                // the space bar over three of them rather than five. The page is a page of the same
-                // keyboard, so its space bar is the same size as the one the thumbs already know.
+                // The letters board's own bottom row, key for key: `ABC` where its comma sits, the
+                // comma where its caps sits, the space over three cells, the enter at the space bar's
+                // right, and the backspace at the row's right end - the seat a stock keyboard puts it
+                // in, and the seat the letters board uses. Five keys over seven cells, centred.
                 listOf(
                     toAlpha.copy(widthWeight = 1f),
                     comma,
                     space.copy(widthWeight = 3f),
-                    period,
                     enter.copy(widthWeight = 1f),
+                    delete.copy(widthWeight = 1f),
                 ),
                 leadingGap = 1.5f,
                 trailingGap = 1.5f,
