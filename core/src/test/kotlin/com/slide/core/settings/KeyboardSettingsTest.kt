@@ -7,6 +7,7 @@ import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.mutablePreferencesOf
 import androidx.datastore.preferences.core.stringPreferencesKey
+import com.slide.core.layout.KeyboardLanguages
 import java.io.IOException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.async
@@ -418,6 +419,7 @@ class KeyboardSettingsTest {
             colourSeedLightness = 0.4f,
             followSystemDarkMode = false,
             languageTag = "es-ES",
+            enabledLanguages = setOf("en"),
             showKeyBorders = true,
             showKeyPreview = false,
             // The digit row is off by default now, so its non-default value is on.
@@ -509,5 +511,21 @@ class KeyboardSettingsTest {
         val both = mutablePreferencesOf(wasSingle to 24f, wasPortrait to 8f).toKeyboardSettings()
         assertEquals(8f, both.portraitBoardOffsetDp, 0f)
         assertEquals(24f, both.landscapeBoardOffsetDp, 0f)
+    }
+
+    @Test
+    fun `turning off the language in use moves onto one that is still on`() {
+        if (KeyboardLanguages.SWITCHABLE.size < 2) return
+        val first = KeyboardLanguages.SWITCHABLE[0]
+        val second = KeyboardLanguages.SWITCHABLE[1]
+        val start = KeyboardSettings(
+            languageTag = first.tag,
+            enabledLanguages = setOf(first.language, second.language),
+        )
+        val after = start.toggleLanguage(first.language, on = false)
+        assertEquals(setOf(second.language), after.enabledLanguages)
+        assertEquals(second.tag, after.languageTag)
+        val refused = after.toggleLanguage(second.language, on = false)
+        assertEquals(after, refused)
     }
 }

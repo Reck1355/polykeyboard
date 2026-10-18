@@ -250,4 +250,31 @@ class SuggestionPlacementTest {
         // square nought: a press there is theirs, not the words'.
         assertTrue(SuggestionStripLayout.withinWindow(96f, 360f, 48f, voiceEnabled = false))
     }
+
+    @Test
+    fun `a settled one-cell scroll puts the next word at the left edge`() {
+        val cell = 56f
+        val count = 8
+        val scrollPx = cell
+        assertEquals(1, SuggestionStripLayout.firstVisibleIndex(scrollPx, cell))
+        assertEquals(0f, SuggestionStripLayout.remainderPx(scrollPx, cell), 0.001f)
+        assertEquals(1, SuggestionStripLayout.indexForSlot(0, scrollPx, cell, count))
+        assertEquals(2, SuggestionStripLayout.indexForSlot(1, scrollPx, cell, count))
+        assertEquals(3, SuggestionStripLayout.indexForSlot(2, scrollPx, cell, count))
+        assertEquals(0f, SuggestionStripLayout.slotLeft(0, scrollPx, cell), 0.001f)
+        // The old drawing mixed a slot index with the full pixel offset, which placed that next
+        // word one cell left of the window (and made a short swipe look like it went nowhere).
+        assertEquals(-cell, 0 * cell - scrollPx, 0.001f)
+    }
+
+    @Test
+    fun `a half-cell drag keeps the first word partly in the window`() {
+        val cell = 56f
+        val scrollPx = cell / 2f
+        assertEquals(0, SuggestionStripLayout.firstVisibleIndex(scrollPx, cell))
+        assertEquals(cell / 2f, SuggestionStripLayout.remainderPx(scrollPx, cell), 0.001f)
+        assertEquals(0, SuggestionStripLayout.indexForSlot(0, scrollPx, cell, count = 8))
+        assertEquals(-cell / 2f, SuggestionStripLayout.slotLeft(0, scrollPx, cell), 0.001f)
+        assertEquals(cell / 2f, SuggestionStripLayout.slotLeft(1, scrollPx, cell), 0.001f)
+    }
 }

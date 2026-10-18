@@ -92,6 +92,39 @@ class KeyboardLanguagesTest {
     }
 
     @Test
+    fun `an empty stored set means every shipped language is on`() {
+        assertEquals(KeyboardLanguages.SWITCHABLE, KeyboardLanguages.enabledLanguages(emptySet()))
+        for (entry in KeyboardLanguages.SWITCHABLE) {
+            assertTrue(KeyboardLanguages.languageIsOn(emptySet(), entry.language))
+        }
+    }
+
+    @Test
+    fun `the globe walks only the languages that are on`() {
+        if (KeyboardLanguages.SWITCHABLE.size < 2) return
+        val first = KeyboardLanguages.SWITCHABLE[0].language
+        val second = KeyboardLanguages.SWITCHABLE[1].language
+        assertEquals(first, KeyboardLanguages.next(first, setOf(first)).language)
+        assertEquals(second, KeyboardLanguages.next(first, setOf(first, second)).language)
+        assertEquals(first, KeyboardLanguages.next(second, setOf(first, second)).language)
+    }
+
+    @Test
+    fun `the last remaining language cannot be turned off`() {
+        val last = KeyboardLanguages.SWITCHABLE.first().language
+        assertEquals(setOf(last), KeyboardLanguages.withLanguageOn(setOf(last), last, on = false))
+    }
+
+    @Test
+    fun `turning one off from a fresh install leaves the rest on`() {
+        if (KeyboardLanguages.SWITCHABLE.size < 2) return
+        val drop = KeyboardLanguages.SWITCHABLE.last().language
+        val left = KeyboardLanguages.withLanguageOn(emptySet(), drop, on = false)
+        assertEquals(KeyboardLanguages.SWITCHABLE.size - 1, left.size)
+        assertFalse(drop in left)
+    }
+
+    @Test
     fun `every resolved language has boards to draw`() {
         // The resolver is the only source of a language and the board table is the only consumer of
         // one, so they have to agree for every answer the resolver can give.

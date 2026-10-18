@@ -83,6 +83,7 @@ import com.slide.core.settings.ClassicKeyboard
 import com.slide.core.settings.KeyboardSettings
 import com.slide.core.settings.KeyboardSize
 import com.slide.core.settings.SettingsRepository
+import com.slide.core.settings.toggleLanguage
 import com.slide.core.theme.ColourChoice
 import com.slide.core.theme.Colours
 import com.slide.core.theme.KeyboardColours
@@ -413,28 +414,28 @@ private fun SetupScreen(repository: SettingsRepository) {
                     Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                         Text("Languages", style = MaterialTheme.typography.titleMedium)
                         Text(
-                            "Which language the keyboard types in. The globe key on the board cycles " +
-                                "these, and both write the same choice, so the keyboard and this card " +
-                                "never disagree about it.",
+                            "Which languages the globe key cycles. Turn one off to leave it out. " +
+                                "At least one stays on.",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            KeyboardLanguages.SWITCHABLE.forEach { entry ->
-                                // Nothing has been chosen until a tag is stored, so a fresh install shows
-                                // no chip selected rather than claiming a language the keyboard picked
-                                // for itself.
-                                val selected = settings.languageTag.isNotEmpty() &&
-                                    KeyboardLanguages.resolve(settings.languageTag) == entry.language
-                                LanguageChip(
-                                    label = entry.label,
-                                    selected = selected,
-                                    onClick = {
-                                        scope.launch {
-                                            repository.update { it.copy(languageTag = entry.tag) }
-                                        }
-                                    },
-                                )
+                        KeyboardLanguages.SWITCHABLE.forEach { entry ->
+                            val on = KeyboardLanguages.languageIsOn(settings.enabledLanguages, entry.language)
+                            val onlyThis = on && KeyboardLanguages.enabledLanguages(settings.enabledLanguages).size == 1
+                            val current = settings.languageTag.isNotEmpty() &&
+                                KeyboardLanguages.resolve(settings.languageTag) == entry.language
+                            SettingSwitch(
+                                label = entry.label,
+                                checked = on,
+                                description = when {
+                                    onlyThis -> "At least one language has to stay on."
+                                    current -> "The keyboard is typing in this one."
+                                    else -> null
+                                },
+                            ) { value ->
+                                scope.launch {
+                                    repository.update { it.toggleLanguage(entry.language, value) }
+                                }
                             }
                         }
                     }
@@ -1051,41 +1052,6 @@ private fun ThemeSwatch(color: Color, label: String, selected: Boolean, onClick:
                 .clickable(onClick = onClick),
         )
         Text(label, style = MaterialTheme.typography.labelSmall, modifier = Modifier.padding(top = 4.dp))
-    }
-}
-
-/**
- * A language the keyboard ships, as a chip; the selected one is filled.
- *
- * The same control as the Colours screen's swatches, for the same reason: picking one of a small,
- * fixed set is not a switch or a slider, and a chip shows what the alternatives are while it is
- * being read.
- */
-@Composable
-private fun LanguageChip(label: String, selected: Boolean, onClick: () -> Unit) {
-    val shape = RoundedCornerShape(50)
-    Box(
-        modifier = Modifier
-            .background(
-                color = if (selected) MaterialTheme.colorScheme.primary
-                else MaterialTheme.colorScheme.surfaceVariant,
-                shape = shape,
-            )
-            .border(
-                width = if (selected) 2.dp else 1.dp,
-                color = if (selected) MaterialTheme.colorScheme.primary
-                else MaterialTheme.colorScheme.outlineVariant,
-                shape = shape,
-            )
-            .clickable(onClick = onClick)
-            .padding(horizontal = 16.dp, vertical = 10.dp),
-    ) {
-        Text(
-            label,
-            style = MaterialTheme.typography.labelLarge,
-            color = if (selected) MaterialTheme.colorScheme.onPrimary
-            else MaterialTheme.colorScheme.onSurfaceVariant,
-        )
     }
 }
 

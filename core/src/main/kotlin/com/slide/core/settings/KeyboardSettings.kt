@@ -17,6 +17,7 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
 import androidx.datastore.preferences.preferencesDataStore
 import com.slide.core.emoji.EmojiData
+import com.slide.core.layout.KeyboardLanguages
 import com.slide.core.theme.ColourChoice
 import com.slide.core.theme.Colours
 import com.slide.core.theme.Themes
@@ -77,6 +78,14 @@ data class KeyboardSettings(
      * an install that has only ever used one language, behaving exactly as before.
      */
     val languageTag: String = "",
+    /**
+     * Which shipped languages the globe key cycles, as language codes (`en`, `es`, `zh`).
+     *
+     * Empty means every language this build ships is on. That is a fresh install, and it is also
+     * how a backup from before this field existed has to read. The last remaining language cannot
+     * be turned off; [toggleLanguage] is the one place that enforces it.
+     */
+    val enabledLanguages: Set<String> = emptySet(),
     val showKeyBorders: Boolean = false,
     val showKeyPreview: Boolean = true,
     /**
@@ -314,7 +323,7 @@ private val LEGACY_SETTINGS_MIGRATION_COMPLETE =
 
 /** Preferences keys are name-based, so validate the erased value before copying the legacy key. */
 internal fun isBackupEligibleSetting(name: String, value: Any): Boolean = when (name) {
-    "theme_id", "voice_model", "colour_preset_id", "language_tag" -> value is String
+    "theme_id", "voice_model", "colour_preset_id", "language_tag", "enabled_languages" -> value is String
     "key_height_scale", "haptic_strength", "sound_volume" -> value is Float
     "portrait_board_offset_dp", "landscape_board_offset_dp" -> value is Float
     // Still eligible although nothing writes it: an installed copy holds it, and a restore from an older
@@ -637,6 +646,7 @@ private object Keys {
     val COLOUR_SEED_LIGHTNESS = floatPreferencesKey("colour_seed_lightness")
     val FOLLOW_SYSTEM_DARK = booleanPreferencesKey("follow_system_dark")
     val LANGUAGE_TAG = stringPreferencesKey("language_tag")
+    val ENABLED_LANGUAGES = stringPreferencesKey("enabled_languages")
     val KEY_BORDERS = booleanPreferencesKey("key_borders")
     val KEY_PREVIEW = booleanPreferencesKey("key_preview")
     val NUMBER_ROW = booleanPreferencesKey("number_row")
@@ -686,6 +696,21 @@ val BOARD_OFFSET_RANGE = -64f..64f
 fun KeyboardSettings.boardOffsetDp(landscape: Boolean): Float =
     if (landscape) landscapeBoardOffsetDp else portraitBoardOffsetDp
 
+/**
+ * Turns one shipped language on or off. The last remaining language stays on. Turning off the
+ * language the keyboard is currently typing in moves it onto the first one that is still on.
+ */
+fun KeyboardSettings.toggleLanguage(language: String, on: Boolean): KeyboardSettings {
+    val nextEnabled = KeyboardLanguages.withLanguageOn(enabledLanguages, language, on)
+    val resolved = KeyboardLanguages.resolve(languageTag)
+    val nextTag = if (languageTag.isNotEmpty() && !KeyboardLanguages.languageIsOn(nextEnabled, resolved)) {
+        KeyboardLanguages.enabledLanguages(nextEnabled).first().tag
+    } else {
+        languageTag
+    }
+    return copy(enabledLanguages = nextEnabled, languageTag = nextTag)
+}
+
 internal fun MutablePreferences.writeKeyboardSettings(updated: KeyboardSettings) {
     this[Keys.THEME_ID] = updated.themeId
     this[Keys.COLOUR_PRESET_ID] = updated.colourPresetId
@@ -694,6 +719,7 @@ internal fun MutablePreferences.writeKeyboardSettings(updated: KeyboardSettings)
     this[Keys.COLOUR_SEED_LIGHTNESS] = updated.colourSeedLightness
     this[Keys.FOLLOW_SYSTEM_DARK] = updated.followSystemDarkMode
     this[Keys.LANGUAGE_TAG] = updated.languageTag
+    this[Keys.ENABLED_LANGUAGES] = updated.enabledLanguages.sorted().joinToString(",")
     this[Keys.KEY_BORDERS] = updated.showKeyBorders
     this[Keys.KEY_PREVIEW] = updated.showKeyPreview
     this[Keys.NUMBER_ROW] = updated.showNumberRow
@@ -731,6 +757,11 @@ internal fun Preferences.toKeyboardSettings(): KeyboardSettings {
         colourSeedLightness = boundedFloat(Keys.COLOUR_SEED_LIGHTNESS, defaults.colourSeedLightness, 0f..1f),
         followSystemDarkMode = this[Keys.FOLLOW_SYSTEM_DARK] ?: defaults.followSystemDarkMode,
         languageTag = this[Keys.LANGUAGE_TAG] ?: defaults.languageTag,
+        enabledLanguages = (this[Keys.ENABLED_LANGUAGES] ?: "")
+            .split(',')
+            .map { it.trim() }
+            .filter { it.isNotEmpty() }
+            .toSet(),
         showKeyBorders = this[Keys.KEY_BORDERS] ?: defaults.showKeyBorders,
         showKeyPreview = this[Keys.KEY_PREVIEW] ?: defaults.showKeyPreview,
         showNumberRow = this[Keys.NUMBER_ROW] ?: defaults.showNumberRow,

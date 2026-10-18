@@ -705,7 +705,7 @@ class SlideInputMethodService :
      * is still exactly one thing that decides which language is live.
      */
     private fun switchToNextLanguage() {
-        val next = KeyboardLanguages.next(language)
+        val next = KeyboardLanguages.next(language, settings.enabledLanguages)
         scope.launch { settingsRepository.update { it.copy(languageTag = next.tag) } }
         alignSubtypeWith(next.tag)
     }

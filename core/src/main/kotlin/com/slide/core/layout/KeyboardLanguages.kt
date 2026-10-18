@@ -100,15 +100,51 @@ object KeyboardLanguages {
     fun entryForTag(tag: String?): Entry = entryFor(resolve(tag))
 
     /**
-     * The next language after a resolved [language], wrapping at the end.
+     * The languages the globe key actually cycles, in [SWITCHABLE] order.
+     *
+     * An empty [stored] set means every shipped language is on — that is a fresh install, and it is
+     * also how a backup from before this control existed has to read. A set that names nothing this
+     * build ships is treated the same way, rather than leaving the globe with nowhere to go.
+     */
+    fun enabledLanguages(stored: Set<String>): List<Entry> {
+        val known = stored.filter { it in SUPPORTED }.toSet()
+        val list = SWITCHABLE.filter { it.language in known }
+        return list.ifEmpty { SWITCHABLE }
+    }
+
+    /** Whether [language] is in the globe's cycle given the stored on/off set. */
+    fun languageIsOn(stored: Set<String>, language: String): Boolean =
+        enabledLanguages(stored).any { it.language == language }
+
+    /**
+     * The on/off set after flipping [language]. The last remaining language cannot be turned off:
+     * a keyboard with no language is not a state this object will return.
+     */
+    fun withLanguageOn(stored: Set<String>, language: String, on: Boolean): Set<String> {
+        if (language !in SUPPORTED) {
+            return enabledLanguages(stored).map { it.language }.toSet()
+        }
+        val current = enabledLanguages(stored).map { it.language }.toMutableSet()
+        if (on) {
+            current += language
+        } else if (current.size > 1) {
+            current -= language
+        }
+        return current
+    }
+
+    /**
+     * The next language after a resolved [language], wrapping at the end of the languages that
+     * are on. [enabled] is the stored on/off set; empty means all of [SWITCHABLE].
      *
      * The argument is a resolved language rather than a tag on purpose: the keyboard holds a
      * resolved language while it is typing, and cycling from a tag would let a regional variant in
      * the store change the order of the list.
      */
-    fun next(language: String): Entry {
-        val index = SWITCHABLE.indexOfFirst { it.language == language }
-        return if (index < 0) SWITCHABLE.first() else SWITCHABLE[(index + 1) % SWITCHABLE.size]
+    fun next(language: String, enabled: Set<String> = emptySet()): Entry {
+        val list = enabledLanguages(enabled)
+        val index = list.indexOfFirst { it.language == language }
+        return if (index < 0) list.first() else list[(index + 1) % list.size]
     }
 
     /**

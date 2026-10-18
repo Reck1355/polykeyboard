@@ -21,6 +21,7 @@ import androidx.core.graphics.ColorUtils
 import com.slide.core.layout.KeyboardLanguages
 import com.slide.core.settings.ClassicKeyboard
 import com.slide.core.settings.KeyboardSettings
+import com.slide.core.settings.toggleLanguage
 import com.slide.core.theme.ColourPreset
 import com.slide.core.theme.Colours
 import com.slide.core.theme.KeyboardTheme
@@ -65,7 +66,6 @@ class KeyboardSettingsPanelView(context: Context) : LinearLayout(context) {
     private val switches = mutableListOf<ToggleBinding>()
     private val sliders = mutableListOf<SliderBinding>()
     private val colourChips = linkedMapOf<ColourPreset, TextView>()
-    private val languageChips = linkedMapOf<KeyboardLanguages.Entry, TextView>()
     private var binding = false
 
     private val backButton = BackIconView(context).apply {
@@ -107,8 +107,31 @@ class KeyboardSettingsPanelView(context: Context) : LinearLayout(context) {
 
         addSection(body, "Colours")
         addColourPicker(body)
-        addSection(body, "Languages")
-        addLanguagePicker(body)
+        if (KeyboardLanguages.SWITCHABLE.size > 1) {
+            addSection(body, "Languages")
+            addNote(
+                body,
+                "Which languages the globe key cycles. Turn one off to leave it out. At least one stays on.",
+            )
+            KeyboardLanguages.SWITCHABLE.forEach { entry ->
+                addToggle(
+                    body,
+                    entry.label,
+                    describe = { current ->
+                        val on = KeyboardLanguages.languageIsOn(current.enabledLanguages, entry.language)
+                        val onlyThis = on && KeyboardLanguages.enabledLanguages(current.enabledLanguages).size == 1
+                        val typing = current.languageTag.isNotEmpty() &&
+                            KeyboardLanguages.resolve(current.languageTag) == entry.language
+                        when {
+                            onlyThis -> "At least one language has to stay on."
+                            typing -> "The keyboard is typing in this one."
+                            else -> "The globe key cycles the languages that are on."
+                        }
+                    },
+                    read = { KeyboardLanguages.languageIsOn(it.enabledLanguages, entry.language) },
+                ) { value, checked -> value.toggleLanguage(entry.language, checked) }
+            }
+        }
         addSection(body, "Typing")
         addToggle(body, "Gesture typing", read = { it.gestureTypingEnabled }) { value, checked ->
             value.copy(gestureTypingEnabled = checked)
@@ -261,55 +284,6 @@ class KeyboardSettingsPanelView(context: Context) : LinearLayout(context) {
                 }
             }
             colourChips[preset] = chip
-            row.addView(
-                chip,
-                LayoutParams(LayoutParams.WRAP_CONTENT, dp(38f)).apply {
-                    marginEnd = dp(8f)
-                },
-            )
-        }
-        parent.addView(
-            HorizontalScrollView(context).apply {
-                isHorizontalScrollBarEnabled = false
-                overScrollMode = OVER_SCROLL_IF_CONTENT_SCROLLS
-                addView(row)
-            },
-            LayoutParams(LayoutParams.MATCH_PARENT, dp(48f)),
-        )
-    }
-
-    /**
-     * The languages this build ships, one chip each, and the whole of the in-keyboard control.
-     *
-     * Before this section existed the only way to change language was Android's own keyboard-language
-     * list, and it is not a control a person can find: a subtype declared in `method.xml` is not an
-     * enabled one, so with a single entry ticked the globe key correctly switched between nothing and
-     * the keyboard looked like it had no language setting at all. The globe key still cycles these
-     * entries, and both write the same stored tag, so the two never disagree.
-     */
-    private fun addLanguagePicker(parent: LinearLayout) {
-        val row = LinearLayout(context).apply {
-            orientation = HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            setPadding(0, 0, 0, dp(8f))
-        }
-        KeyboardLanguages.SWITCHABLE.forEach { entry ->
-            val chip = TextView(context).apply {
-                text = entry.label
-                gravity = Gravity.CENTER
-                setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
-                setPadding(dp(13f), 0, dp(13f), 0)
-                minWidth = dp(64f)
-                contentDescription = "${entry.label} keyboard language"
-                isClickable = true
-                isFocusable = true
-                setOnClickListener {
-                    val change = { current: KeyboardSettings -> current.copy(languageTag = entry.tag) }
-                    settings = change(settings)
-                    listener?.onKeyboardSettingsChanged(change)
-                }
-            }
-            languageChips[entry] = chip
             row.addView(
                 chip,
                 LayoutParams(LayoutParams.WRAP_CONTENT, dp(38f)).apply {
@@ -618,43 +592,6 @@ class KeyboardSettingsPanelView(context: Context) : LinearLayout(context) {
                 ColorStateList.valueOf(keyboardTheme.divider)
         }
         applyThemeChips()
-        applyLanguageChips()
-    }
-
-    /**
-     * Marks the chip for the language the keyboard is actually in.
-     *
-     * The stored tag is compared, because that one field is what both doors write — the settings
-     * card and the globe key. A chip showing a language the keyboard was not typing in would be a
-     * second answer to the same question, which is the failure this section exists to end.
-     *
-     * Nothing selected on a fresh install is correct rather than a bug: an empty tag means no choice
-     * has been made yet, and the keyboard is typing whatever Android reported.
-     */
-    private fun applyLanguageChips() {
-        languageChips.forEach { (entry, chip) ->
-            val selected = settings.languageTag.isNotEmpty() &&
-                KeyboardLanguages.resolve(settings.languageTag) == entry.language
-            chip.setTextColor(if (selected) keyboardTheme.accentText else keyboardTheme.keyText)
-            chip.setTypeface(
-                chip.typeface,
-                if (selected) android.graphics.Typeface.BOLD else android.graphics.Typeface.NORMAL,
-            )
-            chip.contentDescription = "${entry.label} keyboard language" +
-                if (selected) ", selected" else ""
-            chip.background = GradientDrawable().apply {
-                cornerRadius = dp(19f).toFloat()
-                setColor(
-                    if (selected) keyboardTheme.accentBackground
-                    else keyboardTheme.specialKeyBackground,
-                )
-                setStroke(
-                    dp(if (selected) 2f else 1f),
-                    if (selected) keyboardTheme.accentBackground else keyboardTheme.divider,
-                )
-            }
-            chip.isSelected = selected
-        }
     }
 
     private fun applyThemeChips() {

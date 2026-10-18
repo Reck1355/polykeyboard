@@ -515,9 +515,23 @@ class SuggestionStripView(context: Context) : View(context) {
         val windowWidth = suggestionWidth()
         canvas.save()
         canvas.clipRect(windowLeft, 0f, windowLeft + windowWidth, height.toFloat())
+        val origin = if (words.size <= MAX_VISIBLE) {
+            0
+        } else {
+            SuggestionStripLayout.firstVisibleIndex(scrollPx, cellWidth)
+        }
+        val remainder = if (words.size <= MAX_VISIBLE) {
+            0f
+        } else {
+            SuggestionStripLayout.remainderPx(scrollPx, cellWidth)
+        }
         for (slot in -1 until MAX_VISIBLE + 1) {
-            val index = candidateAtSlot(slot) ?: continue
-            val left = windowLeft + slot * cellWidth - scrollPx
+            val index = if (words.size <= MAX_VISIBLE) {
+                SuggestionPlacement.candidateAtSlot(words.size, slot) ?: continue
+            } else {
+                (origin + slot).takeIf { it in words.indices } ?: continue
+            }
+            val left = windowLeft + slot * cellWidth - remainder
 
             if (index == pressedIndex) {
                 pressedPaint.color = keyboardTheme.keyPressedOverlay
@@ -778,6 +792,7 @@ class SuggestionStripView(context: Context) : View(context) {
                     voiceEnabled = voiceEnabled,
                     trailingSquares = trailingSquares(),
                 )
+                if (dragWindow) parent?.requestDisallowInterceptTouchEvent(true)
                 return overButton || pressedIndex >= 0 || dragWindow
             }
 
@@ -806,6 +821,7 @@ class SuggestionStripView(context: Context) : View(context) {
                 ) {
                     if (!dragging && kotlin.math.abs(x - dragStartX) > dp(8f)) {
                         dragging = true
+                        parent?.requestDisallowInterceptTouchEvent(true)
                         releasePress()
                     }
                     if (dragging) {
@@ -875,6 +891,7 @@ class SuggestionStripView(context: Context) : View(context) {
             }
 
             MotionEvent.ACTION_CANCEL -> {
+                parent?.requestDisallowInterceptTouchEvent(false)
                 settleScroll()
                 releasePress()
             }
@@ -889,6 +906,7 @@ class SuggestionStripView(context: Context) : View(context) {
 
     /** Resolves the current press: fires whichever control the pressing finger still holds. */
     private fun finishTap() {
+        parent?.requestDisallowInterceptTouchEvent(false)
         settleScroll()
         val index = pressedIndex
         val clipboard = clipboardPressed
@@ -1018,15 +1036,16 @@ class SuggestionStripView(context: Context) : View(context) {
         if (words.size <= MAX_VISIBLE) {
             SuggestionPlacement.candidateAtSlot(words.size, slot)
         } else {
-            (scrollOffset + slot).takeIf { it in words.indices }
+            SuggestionStripLayout.indexForSlot(slot, scrollPx, cellWidth(), words.size)
         }
 
-    /** Which slot [index] is drawn in, or null when it is scrolled out of sight. */
     private fun slotOfIndex(index: Int): Int? =
         if (words.size <= MAX_VISIBLE) {
             SuggestionPlacement.slotForCandidate(words.size, index)
+                .takeIf { it in 0 until MAX_VISIBLE }
         } else {
-            (index - scrollOffset).takeIf { it in 0 until MAX_VISIBLE }
+            val origin = SuggestionStripLayout.firstVisibleIndex(scrollPx, cellWidth())
+            (index - origin).takeIf { it in 0 until MAX_VISIBLE }
         }
 
     private fun indexAt(x: Float): Int {
@@ -1241,6 +1260,39 @@ internal object SuggestionStripLayout {
      */
     fun draggedPx(startPx: Float, fingerDownX: Float, fingerX: Float, maxPx: Float): Float =
         (startPx - (fingerX - fingerDownX)).coerceIn(0f, maxPx.coerceAtLeast(0f))
+
+    /**
+     * The first candidate whose left edge has passed the window's left edge.
+     *
+     * Drawing used to pair this with the full [scrollPx] as if they were the same unit: a slot
+     * index times a cell, minus a pixel offset. After a one-cell settle that placed the next word
+     * one cell *left* of the window, so a swipe either snapped back to the same three words or
+     * skipped one. Floor of pixels-over-cell is the origin; the leftover pixels are the remainder
+     * [remainderPx] draws with.
+     */
+    fun firstVisibleIndex(scrollPx: Float, cell: Float): Int {
+        if (cell <= 0f) return 0
+        return floor(scrollPx / cell).toInt().coerceAtLeast(0)
+    }
+
+    /** How far into the current cell [scrollPx] sits, in pixels. Always in `[0, cell)`. */
+    fun remainderPx(scrollPx: Float, cell: Float): Float {
+        if (cell <= 0f) return 0f
+        return scrollPx - firstVisibleIndex(scrollPx, cell) * cell
+    }
+
+    /** The candidate drawn in [slot] once the list has travelled [scrollPx]. */
+    fun indexForSlot(slot: Int, scrollPx: Float, cell: Float, count: Int): Int? {
+        val index = firstVisibleIndex(scrollPx, cell) + slot
+        return index.takeIf { it in 0 until count }
+    }
+
+    /**
+     * Left edge of [slot] relative to the window, after [scrollPx]. Zero when a settle has lined
+     * that slot up with the window's left edge.
+     */
+    fun slotLeft(slot: Int, scrollPx: Float, cell: Float): Float =
+        slot * cell - remainderPx(scrollPx, cell)
 
     /** Whether [x] is in the candidate window rather than in one of the controls' squares. */
     fun withinWindow(
