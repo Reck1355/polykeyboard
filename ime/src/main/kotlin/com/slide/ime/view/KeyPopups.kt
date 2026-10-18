@@ -14,6 +14,34 @@ import com.slide.core.theme.KeyboardTheme
 import kotlin.math.min
 import kotlin.math.roundToInt
 
+/**
+ * Where the enlarged-label popup is placed, in **screen** coordinates.
+ *
+ * Two spaces meet here and mixing them is easy: the board places its keys in the view's own space,
+ * while `PopupWindow.showAtLocation` positions against the display. Doing that arithmetic in one
+ * testable place is what keeps the popup over the finger it belongs to; the version that read the
+ * anchor's *window* origin instead of its *screen* origin put the preview above the top of the
+ * display, where nobody ever saw it.
+ *
+ * The x is clamped to the view so a key at either edge does not push the popup off the side, and the
+ * y is deliberately allowed above the view's top edge: that is the row above, which is exactly what
+ * a key preview is supposed to cover.
+ */
+internal fun previewPopupPosition(
+    viewScreenX: Int,
+    viewScreenY: Int,
+    viewWidth: Int,
+    keyCenterX: Float,
+    keyTop: Float,
+    popupWidth: Int,
+    popupHeight: Int,
+    marginPx: Int,
+): Pair<Int, Int> {
+    val maxX = (viewWidth - popupWidth).coerceAtLeast(0)
+    val localX = (keyCenterX - popupWidth / 2f).roundToInt().coerceIn(0, maxX)
+    return (viewScreenX + localX) to (viewScreenY + keyTop.roundToInt() - popupHeight - marginPx)
+}
+
 /** Enlarged label shown above the key currently under the finger. */
 class KeyPreviewPopup(private val anchor: View) {
 
@@ -53,11 +81,21 @@ class KeyPreviewPopup(private val anchor: View) {
         val popupWidth = maxOf(label.measuredWidth, (key.width * 1.18f).roundToInt())
         val popupHeight = label.measuredHeight
 
-        anchor.getLocationInWindow(location)
-        val maxX = anchor.width - popupWidth
-        val localX = (key.centerX - popupWidth / 2f).roundToInt().coerceIn(0, maxOf(0, maxX))
-        val x = location[0] + localX
-        val y = location[1] + key.top.roundToInt() - popupHeight - (4 * density).roundToInt()
+        // Screen coordinates, not window coordinates: the board places its keys in the view's own
+        // space, and `showAtLocation` positions against the display. Reading the anchor's window
+        // origin left the popup one keyboard-and-status-bar height above the finger, off the display
+        // entirely, which is why the preview never appeared.
+        anchor.getLocationOnScreen(location)
+        val (x, y) = previewPopupPosition(
+            viewScreenX = location[0],
+            viewScreenY = location[1],
+            viewWidth = anchor.width,
+            keyCenterX = key.centerX,
+            keyTop = key.top,
+            popupWidth = popupWidth,
+            popupHeight = popupHeight,
+            marginPx = (4 * density).roundToInt(),
+        )
 
         if (window.isShowing) {
             window.update(x, y, popupWidth, popupHeight)
