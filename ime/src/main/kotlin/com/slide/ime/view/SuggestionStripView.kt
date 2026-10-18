@@ -5,14 +5,22 @@ import android.graphics.Canvas
 import android.graphics.Paint
 import android.graphics.Rect
 import android.graphics.Typeface
+import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.os.Bundle
+import android.text.TextUtils
 import android.util.TypedValue
+import android.view.Gravity
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewConfiguration
+import android.view.ViewGroup
 import android.view.accessibility.AccessibilityNodeInfo
+import android.widget.FrameLayout
+import android.widget.HorizontalScrollView
+import android.widget.LinearLayout
+import android.widget.TextView
 import androidx.core.view.ViewCompat
 import androidx.core.view.accessibility.AccessibilityNodeInfoCompat
 import androidx.customview.widget.ExploreByTouchHelper
@@ -26,13 +34,12 @@ import kotlin.math.sin
 /**
  * The row of word candidates above the keys.
  *
- * The centre cell is the leading candidate and the side cells are alternatives. Keeping that
- * placement stable turns a wrong decode from a retyped word into one predictable tap.
- *
- * It draws itself rather than nesting TextViews. Three cells is a fixed, tiny layout, and doing it
- * in one onDraw keeps it consistent with [KeyboardView] and avoids a measure pass on every swipe.
+ * Three cells fit on screen. Anything past that lives in a real [HorizontalScrollView], because
+ * three rounds of custom pixel-drag on this view still did not move the words on glass. Android's
+ * own scroller is what actually receives a finger. Best candidate is first, on the left, so a
+ * swipe reveals later ones instead of fighting a centre-first window that cannot travel.
  */
-class SuggestionStripView(context: Context) : View(context) {
+class SuggestionStripView(context: Context) : FrameLayout(context) {
 
     interface Listener {
         /** Opens the clipboard panel. Offered only while the strip has no candidates. */
@@ -78,12 +85,14 @@ class SuggestionStripView(context: Context) : View(context) {
             languagePressed = false
             symbolsPressed = false
             refreshAccessibilityDescription()
+            requestLayout()
             invalidate()
         }
 
     var keyboardTheme: KeyboardTheme = Themes.Light
         set(value) {
             field = value
+            restyleCandidateChips()
             invalidate()
         }
 
@@ -111,6 +120,44 @@ class SuggestionStripView(context: Context) : View(context) {
         TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_SP, value, resources.displayMetrics)
 
     private val words = ArrayList<StripSuggestion>(HOLD_AT_MOST)
+
+    private val candidateRow = LinearLayout(context).apply {
+        orientation = LinearLayout.HORIZONTAL
+        importantForAccessibility = IMPORTANT_FOR_ACCESSIBILITY_YES
+    }
+
+    private val candidateScroller = HorizontalScrollView(context).apply {
+        isFillViewport = false
+        isHorizontalScrollBarEnabled = true
+        isVerticalScrollBarEnabled = false
+        overScrollMode = OVER_SCROLL_IF_CONTENT_SCROLLS
+        isNestedScrollingEnabled = true
+        isClickable = true
+        importantForAccessibility = IMPORTANT_FOR_ACCESSIBILITY_YES
+        visibility = GONE
+        addView(
+            candidateRow,
+            LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.MATCH_PARENT),
+        )
+        setOnTouchListener { view, event ->
+            // The IME window, not this LinearLayout, is what steals a horizontal drag. Walk every
+            // parent so none of them can intercept after DOWN. Returning false leaves the scroller
+            // itself in charge of the move.
+            when (event.actionMasked) {
+                MotionEvent.ACTION_DOWN, MotionEvent.ACTION_MOVE -> {
+                    var parent = view.parent
+                    while (parent != null) {
+                        parent.requestDisallowInterceptTouchEvent(true)
+                        parent = parent.parent
+                    }
+                }
+                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                    view.parent?.requestDisallowInterceptTouchEvent(false)
+                }
+            }
+            false
+        }
+    }
 
     /**
      * Which candidate the leftmost slot shows.
@@ -219,8 +266,7 @@ class SuggestionStripView(context: Context) : View(context) {
             if (isOverEmoji(x)) return A11Y_EMOJI
             if (isOverLanguage(x)) return A11Y_LANGUAGE
             if (isOverSymbols(x)) return A11Y_SYMBOLS
-            val index = indexAt(x)
-            return if (index >= 0) A11Y_WORD_BASE + index else INVALID_ID
+            return INVALID_ID
         }
 
         override fun getVisibleVirtualViews(virtualViewIds: MutableList<Int>) {
@@ -228,7 +274,6 @@ class SuggestionStripView(context: Context) : View(context) {
                 virtualViewIds += A11Y_CLIPBOARD
                 virtualViewIds += A11Y_EDIT
             }
-            words.indices.forEach { virtualViewIds += A11Y_WORD_BASE + it }
             if (voiceEnabled) virtualViewIds += A11Y_MIC
             virtualViewIds += A11Y_EMOJI
             virtualViewIds += A11Y_LANGUAGE
@@ -378,8 +423,11 @@ class SuggestionStripView(context: Context) : View(context) {
 
     init {
         isFocusable = true
+        isClickable = true
+        setWillNotDraw(false)
         importantForAccessibility = IMPORTANT_FOR_ACCESSIBILITY_YES
         ViewCompat.setAccessibilityDelegate(this, accessibilityHelper)
+        addView(candidateScroller)
         refreshAccessibilityDescription()
     }
 
@@ -418,8 +466,10 @@ class SuggestionStripView(context: Context) : View(context) {
         clipboardPressed = false
         editPressed = false
         micPressed = false
+        rebuildCandidateChips()
         refreshAccessibilityDescription()
         accessibilityHelper.invalidateRoot()
+        requestLayout()
         invalidate()
     }
 
@@ -437,11 +487,48 @@ class SuggestionStripView(context: Context) : View(context) {
     override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
         // The strip keeps its height even when empty. Letting it collapse would resize the whole
         // input view on every swipe, shoving the keys up and down under the user's thumb.
-        setMeasuredDimension(
-            MeasureSpec.getSize(widthMeasureSpec),
-            resolveSize(dp(HEIGHT_DP).toInt(), heightMeasureSpec),
+        val width = MeasureSpec.getSize(widthMeasureSpec)
+        val height = resolveSize(dp(HEIGHT_DP).toInt(), heightMeasureSpec)
+        setMeasuredDimension(width, height)
+        val window = SuggestionStripLayout.suggestionWidth(
+            width.toFloat(),
+            height.toFloat(),
+            voiceEnabled,
+            trailingSquares(),
+        ).toInt().coerceAtLeast(0)
+        candidateScroller.measure(
+            MeasureSpec.makeMeasureSpec(window, MeasureSpec.EXACTLY),
+            MeasureSpec.makeMeasureSpec(height, MeasureSpec.EXACTLY),
         )
     }
+
+    override fun onLayout(changed: Boolean, left: Int, top: Int, right: Int, bottom: Int) {
+        val windowLeft = suggestionLeft().toInt()
+        candidateScroller.layout(
+            windowLeft,
+            0,
+            windowLeft + candidateScroller.measuredWidth,
+            height,
+        )
+        sizeCandidateChips()
+        updateSystemGestureExclusion()
+    }
+
+    override fun onInterceptTouchEvent(event: MotionEvent): Boolean {
+        if (event.actionMasked == MotionEvent.ACTION_DOWN) {
+            val overButton =
+                isOverClipboard(event.x) ||
+                    isOverEdit(event.x) ||
+                    isOverMic(event.x) ||
+                    isOverEmoji(event.x) ||
+                    isOverLanguage(event.x) ||
+                    isOverSymbols(event.x)
+            interceptingButtons = overButton
+        }
+        return interceptingButtons
+    }
+
+    private var interceptingButtons = false
 
     override fun onDraw(canvas: Canvas) {
         canvas.drawColor(keyboardTheme.background)
@@ -485,105 +572,91 @@ class SuggestionStripView(context: Context) : View(context) {
             }
             return
         }
+        // Candidates are real child views inside [candidateScroller]. Drawing them here again
+        // would sit under a scroller that cannot see the finger, which is the bug this view
+        // kept shipping.
+    }
 
-        textPaint.textSize = sp(16f)
-        val cellWidth = suggestionWidth() / MAX_VISIBLE
-
-        // More candidates than fit: a hairline under the words, as long as the share of the list on
-        // screen. It says the strip continues and where the user is in it, which is the difference
-        // between a scroll and a gesture nobody knows is there.
-        if (words.size > MAX_VISIBLE) {
-            val trackLeft = suggestionLeft()
-            val trackWidth = cellWidth * MAX_VISIBLE
-            val shown = (scrollPx + trackWidth) / (cellWidth * words.size)
-            markPaint.color = keyboardTheme.suggestionHighlightText
-            markPaint.strokeWidth = dp(2f)
-            val lineY = height - dp(1.5f)
-            canvas.drawLine(trackLeft, lineY, trackLeft + trackWidth * shown, lineY, markPaint)
+    private fun rebuildCandidateChips() {
+        candidateRow.removeAllViews()
+        if (words.isEmpty()) {
+            candidateScroller.visibility = GONE
+            candidateScroller.scrollTo(0, 0)
+            return
         }
-        // Vertically centre on the text's own middle rather than its baseline.
-        textPaint.getFontMetrics(reusableMetrics)
-        val baseline = height / 2f - (reusableMetrics.ascent + reusableMetrics.descent) / 2f
+        candidateScroller.visibility = VISIBLE
+        candidateScroller.scrollTo(0, 0)
+        words.forEachIndexed { index, suggestion ->
+            candidateRow.addView(candidateChip(index, suggestion))
+        }
+    }
 
-        // Keep the best candidate in the centre. That stable target is easier to scan and matches
-        // the placement people have learned from mature mobile keyboards.
-        // The window is a slot onto the list, so a drag in progress shows two halves of two words at
-        // once: everything the candidates draw is clipped to it rather than allowed to run under a
-        // button. One slot past each edge is drawn too, so a word entering from the side arrives as
-        // it moves instead of appearing only once it has landed.
-        val windowLeft = suggestionLeft()
-        val windowWidth = suggestionWidth()
-        canvas.save()
-        canvas.clipRect(windowLeft, 0f, windowLeft + windowWidth, height.toFloat())
-        val origin = if (words.size <= MAX_VISIBLE) {
-            0
+    private fun candidateChip(index: Int, suggestion: StripSuggestion): TextView =
+        TextView(context).apply {
+            text = suggestion.word
+            gravity = Gravity.CENTER
+            maxLines = 1
+            ellipsize = TextUtils.TruncateAt.END
+            textSize = 16f
+            isClickable = true
+            isFocusable = true
+            isLongClickable = true
+            tag = index
+            layoutParams = LinearLayout.LayoutParams(
+                0,
+                ViewGroup.LayoutParams.MATCH_PARENT,
+            )
+            setOnClickListener {
+                listener?.onSuggestionPicked(index, suggestion.word)
+            }
+            setOnLongClickListener {
+                listener?.onSuggestionHeld(index, suggestion.word)
+                true
+            }
+            styleCandidateChip(this, index, suggestion)
+        }
+
+    private fun restyleCandidateChips() {
+        for (i in 0 until candidateRow.childCount) {
+            val chip = candidateRow.getChildAt(i) as? TextView ?: continue
+            val suggestion = words.getOrNull(i) ?: continue
+            styleCandidateChip(chip, i, suggestion)
+        }
+    }
+
+    private fun styleCandidateChip(chip: TextView, index: Int, suggestion: StripSuggestion) {
+        chip.setTextColor(
+            if (index == 0) keyboardTheme.suggestionHighlightText else keyboardTheme.suggestionText,
+        )
+        chip.typeface = if (index == 0) Typeface.DEFAULT_BOLD else Typeface.DEFAULT
+        chip.paintFlags = if (suggestion.isCorrection) {
+            chip.paintFlags or Paint.UNDERLINE_TEXT_FLAG
         } else {
-            SuggestionStripLayout.firstVisibleIndex(scrollPx, cellWidth)
+            chip.paintFlags and Paint.UNDERLINE_TEXT_FLAG.inv()
         }
-        val remainder = if (words.size <= MAX_VISIBLE) {
-            0f
-        } else {
-            SuggestionStripLayout.remainderPx(scrollPx, cellWidth)
-        }
-        for (slot in -1 until MAX_VISIBLE + 1) {
-            val index = if (words.size <= MAX_VISIBLE) {
-                SuggestionPlacement.candidateAtSlot(words.size, slot) ?: continue
-            } else {
-                (origin + slot).takeIf { it in words.indices } ?: continue
-            }
-            val left = windowLeft + slot * cellWidth - remainder
+    }
 
-            if (index == pressedIndex) {
-                pressedPaint.color = keyboardTheme.keyPressedOverlay
-                val inset = dp(4f)
-                canvas.drawRoundRect(
-                    left + inset,
-                    inset,
-                    left + cellWidth - inset,
-                    height - inset,
-                    dp(12f),
-                    dp(12f),
-                    pressedPaint,
-                )
-            }
-
-            // The top choice is the one that gets committed, so it is marked as such: the user
-            // should be able to tell at a glance whether the keyboard already agrees with them.
-            // Accent colour on top of weight, because bold alone disappears at 16sp in peripheral
-            // vision while a colour change reads without focusing on the strip.
-            textPaint.color =
-                if (index == 0) keyboardTheme.suggestionHighlightText else keyboardTheme.suggestionText
-            textPaint.typeface = if (index == 0) Typeface.DEFAULT_BOLD else Typeface.DEFAULT
-
-            val label = ellipsized(words[index].word, cellWidth - dp(12f), bold = index == 0)
-            canvas.drawText(label, left + cellWidth / 2f, baseline, textPaint)
-
-            // A typo fix and a word completion look identical otherwise: same cell, same weight,
-            // same colour. The underline says the keyboard thinks what you typed was wrong, which
-            // is the one thing you need to know before it silently changes the word at the space.
-            // Drawn in the same accent as the top-choice colour, because the two marks answer the
-            // same question and should not look like two different systems.
-            if (words[index].isCorrection) {
-                markPaint.color = keyboardTheme.suggestionHighlightText
-                markPaint.strokeWidth = dp(2f)
-                val half = minOf(textPaint.measureText(label), cellWidth - dp(12f)) / 2f
-                val underlineY = baseline + dp(3f)
-                canvas.drawLine(
-                    left + cellWidth / 2f - half,
-                    underlineY,
-                    left + cellWidth / 2f + half,
-                    underlineY,
-                    markPaint,
-                )
+    private fun sizeCandidateChips() {
+        val cell = (suggestionWidth() / MAX_VISIBLE).toInt().coerceAtLeast(1)
+        for (i in 0 until candidateRow.childCount) {
+            val child = candidateRow.getChildAt(i)
+            val params = child.layoutParams as LinearLayout.LayoutParams
+            if (params.width != cell) {
+                params.width = cell
+                params.height = ViewGroup.LayoutParams.MATCH_PARENT
+                child.layoutParams = params
             }
         }
-        val inset = dp(10f)
-        dividerPaint.color = keyboardTheme.divider
-        for (slot in 1 until MAX_VISIBLE) {
-            val x = windowLeft + slot * cellWidth - scrollPx
-            canvas.drawLine(x, inset, x, height - inset, dividerPaint)
-        }
-        canvas.restore()
+    }
+
+    /**
+     * The strip sits on the display's left edge. Without an exclusion, a press-and-swipe on the
+     * first word is Android's back gesture and this view never sees the move — the same class of
+     * steal [KeyboardView] already opts the letter columns out of.
+     */
+    private fun updateSystemGestureExclusion() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return
+        setSystemGestureExclusionRects(SuggestionStripLayout.exclusionRects(width, height))
     }
 
     /** Shared chrome for the empty-strip toolbar buttons: circle, pressed overlay, then glyph. */
@@ -785,6 +858,9 @@ class SuggestionStripView(context: Context) : View(context) {
                 // A press that starts on the empty part of the window is a drag waiting to happen,
                 // and it has to be claimed here or no move event ever arrives. It used to be claimed
                 // only over a word, so pressing the space beside one scrolled nothing at all.
+                if (candidateScroller.visibility == VISIBLE && !overButton) {
+                    return false
+                }
                 val dragWindow = !overButton && SuggestionStripLayout.withinWindow(
                     x = event.x,
                     width = width.toFloat(),
@@ -1344,6 +1420,15 @@ internal object SuggestionStripLayout {
         if (slotCount <= 0) return 0f
         val cell = suggestionWidth(width, height, voiceEnabled, trailingSquares) / slotCount
         return (count - slotCount).coerceAtLeast(0) * cell
+    }
+
+    /**
+     * The whole strip, so a swipe that starts on the leftmost word is ours rather than Back.
+     * Height is 48 dp, well under the 200 dp per-edge budget the board also spends.
+     */
+    fun exclusionRects(width: Int, height: Int): List<Rect> {
+        if (width <= 0 || height <= 0) return emptyList()
+        return listOf(Rect(0, 0, width, height))
     }
 }
 

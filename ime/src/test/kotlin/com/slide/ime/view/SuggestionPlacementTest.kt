@@ -268,13 +268,10 @@ class SuggestionPlacementTest {
     }
 
     @Test
-    fun `a half-cell drag keeps the first word partly in the window`() {
-        val cell = 56f
-        val scrollPx = cell / 2f
-        assertEquals(0, SuggestionStripLayout.firstVisibleIndex(scrollPx, cell))
-        assertEquals(cell / 2f, SuggestionStripLayout.remainderPx(scrollPx, cell), 0.001f)
-        assertEquals(0, SuggestionStripLayout.indexForSlot(0, scrollPx, cell, count = 8))
-        assertEquals(-cell / 2f, SuggestionStripLayout.slotLeft(0, scrollPx, cell), 0.001f)
-        assertEquals(cell / 2f, SuggestionStripLayout.slotLeft(1, scrollPx, cell), 0.001f)
+    fun `the strip excludes the system back gesture along its full height`() {
+        assertEquals(1, SuggestionStripLayout.exclusionRects(1080, 144).size)
+        assertTrue(SuggestionStripLayout.exclusionRects(0, 144).isEmpty())
+        assertTrue(SuggestionStripLayout.exclusionRects(1080, 0).isEmpty())
+        assertTrue(SuggestionStripLayout.exclusionRects(-1, 144).isEmpty())
     }
 }
